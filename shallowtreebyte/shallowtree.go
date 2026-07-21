@@ -395,7 +395,7 @@ func (st *ShallowTree) recurseGenerateNode(inputCopy []HashPi,
 			}
 
 			newNode := Node{}
-			newNode.Level = level + 1
+			newNode.Level = level + 2 // Two because we've examined a byte (2 nibbles)
 			newNode.NibbleValueLeadingHere = nibbleVal0
 			newNode.LeafNode = &leafNode
 			newNode.SlotsNode = nil
