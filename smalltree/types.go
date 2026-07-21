@@ -1,5 +1,6 @@
 package smalltree
 
-type HashIdType uint64
+type HashIndexIdType uint64
+type LocalNodeIdType uint64
 
-const HashIdNoMatch HashIdType = ^HashIdType(0)
+const HashIndexIdNoMatch HashIndexIdType = ^HashIndexIdType(0)

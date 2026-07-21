@@ -24,7 +24,7 @@ type Node interface {
 }
 
 type LeafNode interface {
-	GetHashId() HashIdType
+	GetHashId() HashIndexIdType
 }
 
 type SlotsNode interface {

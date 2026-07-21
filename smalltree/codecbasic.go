@@ -7,7 +7,7 @@ import "encoding/binary"
 type CodecBasic struct {
 	numSlotsNodes LocalNodeId
 	nodesBytes    []byte
-	hashIdConfig  NByteIdConfig[HashIdType]
+	hashIdConfig  NByteIdConfig[HashIndexIdType]
 }
 
 // Check that implements
@@ -38,13 +38,13 @@ func (cb *CodecBasic) GetNode(id LocalNodeId) Node {
 }
 
 type CodecBasicMaker struct {
-	hashIdConfig NByteIdConfig[HashIdType]
+	hashIdConfig NByteIdConfig[HashIndexIdType]
 }
 
 // Check that implements
 var _ CodecMaker = (*CodecBasicMaker)(nil)
 
-func NewCodecBasicMaker(hashIdConfig NByteIdConfig[HashIdType]) *CodecBasicMaker {
+func NewCodecBasicMaker(hashIdConfig NByteIdConfig[HashIndexIdType]) *CodecBasicMaker {
 	return &CodecBasicMaker{
 		hashIdConfig: hashIdConfig,
 	}
@@ -92,12 +92,12 @@ func (snb *SlotsNodeBasic) GetSlotNode(valSeen SlotSelectorType) LocalNodeId {
 }
 
 type LeafNodeBasic struct {
-	hashId HashIdType
+	hashId HashIndexIdType
 }
 
 // Check that implements
 var _ LeafNode = (*LeafNodeBasic)(nil)
 
-func (lnb *LeafNodeBasic) GetHashId() HashIdType {
+func (lnb *LeafNodeBasic) GetHashId() HashIndexIdType {
 	return lnb.hashId
 }
