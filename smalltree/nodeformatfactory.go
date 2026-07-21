@@ -19,5 +19,10 @@ func (lcnf *LevelsCodecNfFactory) MakeLevelsEncoder() LevelsEncoder {
 	return &LevelsEncoderNf{config: lcnf.config}
 }
 func (lcnf *LevelsCodecNfFactory) MakeLevelDecoder(indexBytes []byte, nodesBytes []byte) LevelDecoder {
-	panic("Not implemented")
+	result := LevelDecoderNf{
+		config:     lcnf.config,
+		nodesBytes: nodesBytes,
+	}
+	result.ConfigureWithIndexBytes(indexBytes)
+	return &result
 }

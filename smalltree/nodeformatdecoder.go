@@ -2,11 +2,16 @@ package smalltree
 
 // LevelDecoderNf the decoder (single level)
 type LevelDecoderNf struct {
-	config *SmallTreeConfig
+	config     *SmallTreeConfig
+	nodesBytes []byte
 }
 
 // Check that implements
 var _ LevelDecoder = (*LevelDecoderNf)(nil)
+
+func (ldn *LevelDecoderNf) ConfigureWithIndexBytes(indexBytes []byte) {
+	panic("Not implemented")
+}
 
 func (ldn *LevelDecoderNf) GetNode(id LocalNodeId) Node {
 	panic("Not implemented")
