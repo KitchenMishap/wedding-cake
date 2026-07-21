@@ -7,8 +7,6 @@ import (
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
 )
 
-// A codec pair for a "NodeFormats" (Nf) kind of node encoding
-
 // LevelsEncoderNf the encoder (multiple levels)
 type LevelsEncoderNf struct {
 	config *SmallTreeConfig
@@ -16,14 +14,6 @@ type LevelsEncoderNf struct {
 
 // Check that implements
 var _ LevelsEncoder = (*LevelsEncoderNf)(nil)
-
-// LevelDecoderNf the decoder (single level)
-type LevelDecoderNf struct {
-	config *SmallTreeConfig
-}
-
-// Check that implements
-var _ LevelDecoder = (*LevelDecoderNf)(nil)
 
 // EncodeSubTree The outer index represents the level, up to the last populated level.
 func (lenf *LevelsEncoderNf) EncodeSubTree(tree *shallowtreebyte.ShallowTree, tf *TreeFormat) ([][]byte, [][]byte) {
@@ -34,10 +24,6 @@ func (lenf *LevelsEncoderNf) EncodeSubTree(tree *shallowtreebyte.ShallowTree, tf
 	lenf.serializeNodesBytes(tree, tf, resultNodesBytes)
 
 	return resultIndexBytes, resultNodesBytes
-}
-
-func (ldn *LevelDecoderNf) GetNode(id LocalNodeId) Node {
-	panic("Not implemented")
 }
 
 // allocateLevelBytes() calculates and allocates the number of bytes for indexBytes and for nodeBytes for each level
@@ -356,65 +342,4 @@ func (lenf *LevelsEncoderNf) serializeTinyNode(slotsNode *shallowtreebyte.SlotsN
 	// If there is remaining capacity, we leave these as zero bytes (the zero bytes for nodeId imply
 	// an empty slot)
 	*bytes = append(*bytes, nodeBytes[:nodeBytesCount]...)
-}
-
-type LevelsCodecNfFactory struct {
-	config *SmallTreeConfig
-}
-
-// Check that implements
-var _ LevelsCodecFactory = (*LevelsCodecNfFactory)(nil)
-
-func NewLevelsCodecNfFactory(config *SmallTreeConfig) LevelsCodecFactory {
-	return &LevelsCodecNfFactory{
-		config: config,
-	}
-}
-
-func (lcnf *LevelsCodecNfFactory) MakeLevelsEncoder() LevelsEncoder {
-	return &LevelsEncoderNf{config: lcnf.config}
-}
-func (lcnf *LevelsCodecNfFactory) MakeLevelDecoder(indexBytes []byte, nodesBytes []byte) LevelDecoder {
-	panic("Not implemented")
-}
-
-// The various concrete types that the nodes returned by the level decoder expose
-type NodeNf struct {
-	leafNode  *LeafNodeNf
-	slotsNode *SlotsNodeNf
-}
-
-// Check that implements
-var _ Node = (*NodeNf)(nil)
-
-func (nnf *NodeNf) IsLeafNode() bool {
-	return nnf.leafNode != nil
-}
-func (nnf *NodeNf) GetLeafNode() LeafNode {
-	return nnf.leafNode
-}
-func (nnf *NodeNf) GetSlotsNode() SlotsNode {
-	return nnf.slotsNode
-}
-
-type SlotsNodeNf struct {
-	slots [256]LocalNodeId
-}
-
-// Check that implements
-var _ SlotsNode = (*SlotsNodeNf)(nil)
-
-func (snnf *SlotsNodeNf) GetSlotNode(valSeen SlotSelectorType) LocalNodeId {
-	return snnf.slots[valSeen]
-}
-
-type LeafNodeNf struct {
-	hashId HashIndexIdType
-}
-
-// Check that implements
-var _ LeafNode = (*LeafNodeNf)(nil)
-
-func (lnnf *LeafNodeNf) GetHashId() HashIndexIdType {
-	return lnnf.hashId
 }
