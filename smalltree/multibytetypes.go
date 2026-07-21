@@ -13,6 +13,7 @@ type IdTypeConstraint interface {
 type NByteIdConfig[T IdTypeConstraint] interface {
 	StorageBytes() int
 	WriteID(b []byte, id T)
+	WriteAllOnes(b []byte)
 	ReadID(b []byte) T
 }
 
@@ -25,6 +26,9 @@ func (ID16[T]) WriteID(b []byte, id T) {
 	if id-T(uint16(id)) != 0 {
 		panic("ID16.WriteID: id is too large")
 	}
+}
+func (ID16[T]) WriteAllOnes(b []byte) {
+	binary.LittleEndian.PutUint16(b[:2], ^uint16(0))
 }
 func (ID16[T]) ReadID(b []byte) T { return T(binary.LittleEndian.Uint16(b[:2])) }
 
@@ -53,6 +57,12 @@ func (ID24[T]) WriteID(b []byte, id T) {
 		panic("ID24.WriteID: id is too large")
 	}
 }
+func (ID24[T]) WriteAllOnes(b []byte) {
+	b[0] = 0xFF
+	b[1] = 0xFF
+	b[2] = 0xFF
+}
+
 func (ID24[T]) ReadID(b []byte) T {
 	return T(uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16))
 }
@@ -66,6 +76,12 @@ func (ID32[T]) WriteID(b []byte, id T) {
 	if id-T(uint32(id)) != 0 {
 		panic("ID16.WriteID: id is too large")
 	}
+}
+func (ID32[T]) WriteAllOnes(b []byte) {
+	b[0] = 0xFF
+	b[1] = 0xFF
+	b[2] = 0xFF
+	b[3] = 0xFF
 }
 func (ID32[T]) ReadID(b []byte) T { return T(binary.LittleEndian.Uint32(b[:4])) }
 
@@ -88,6 +104,13 @@ func (ID40[T]) WriteID(b []byte, id T) {
 	if byte(id>>56) != 0 {
 		panic("ID24.WriteID: id is too large")
 	}
+}
+func (ID40[T]) WriteAllOnes(b []byte) {
+	b[0] = 0xFF
+	b[1] = 0xFF
+	b[2] = 0xFF
+	b[3] = 0xFF
+	b[4] = 0xFF
 }
 func (ID40[T]) ReadID(b []byte) T {
 	return T(b[0]) | (T(b[1]) << 8) | (T(b[2]) << 16) |

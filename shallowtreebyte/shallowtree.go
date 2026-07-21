@@ -281,12 +281,12 @@ func (st *ShallowTree) CountLeaves() int {
 }
 
 // Helper to quickly find the active slots count for a node
-func (stn *Node) activeSlotsCount() int {
+func (stn *Node) ActiveSlotsCount() int {
 	if stn.SlotsNode == nil {
 		return 0
 	}
 	count := 0
-	for i := 0; i < 16; i++ {
+	for i := 0; i < 256; i++ {
 		if !stn.SlotsNode.Slots[i].IsEmpty() {
 			count++
 		}

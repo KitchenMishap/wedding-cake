@@ -180,6 +180,7 @@ type TreeFormat struct {
 type NodeIdAllocation struct {
 	NextAvailableNodeId LocalNodeIdType
 	AvailableNodeIds    LocalNodeIdType
+	OriginalNodeIds     LocalNodeIdType
 }
 
 func (tns *TreeFormat) InitializeNodeIdAllocations() {
@@ -198,7 +199,9 @@ func (tns *TreeFormat) InitializeNodeIdAllocations() {
 			tns.LevelSpecs[level].NodeIdAllocations[group] = NodeIdAllocation{
 				NextAvailableNodeId: nodeId,
 				AvailableNodeIds:    LocalNodeIdType(nodes),
+				OriginalNodeIds:     LocalNodeIdType(nodes),
 			}
+			fmt.Printf("Allocating %d node ids for level %d group %d\n", nodes, level, group)
 			// These will later tell us, for a given active slot count, which
 			// group should allocate us NodeIDs
 			start := tns.LevelSpecs[level].Groups[group].StartSlotsCount
@@ -217,6 +220,9 @@ func (tns *TreeFormat) AllocateIdAndSpecForNode(level byte, activeSlotsCount int
 	// Read directly from the underlying slice index
 	alloc := tns.LevelSpecs[level].NodeIdAllocations[group]
 	if alloc.AvailableNodeIds == 0 {
+		fmt.Printf("Panicking. Level=%d, Group=%d, StartSlotsCount=%d, EndSlotsCount=%d\n",
+			level, group, tns.LevelSpecs[level].Groups[group].StartSlotsCount, tns.LevelSpecs[level].Groups[group].EndSlotsCount)
+		fmt.Printf("activeSlotsCount=%d, OriginalNodeIds=%d\n", activeSlotsCount, alloc.OriginalNodeIds)
 		panic("Too many nodes")
 	}
 
@@ -261,9 +267,11 @@ func ChooseNodeFormatSpecsForTreeShape(treeShape *shallowtreebyte.TreeShape, stc
 		for _, nfg := range nfgs {
 			cost += nfg.Bytes
 		}
-		fmt.Printf("Level %d optimization: Reduced nfgs -> %d, bytes %d -> %d\n",
-			level, len(nfgs), originalCost, cost)
-
+		if cost > 0 {
+			fmt.Printf("Level %d optimization: Reduced nfgs -> %d, bytes %d -> %d\n",
+				level, len(nfgs), originalCost, cost)
+			fmt.Printf("ActiveSlotCountHistogram[0]: %d\n", treeShape.LevelShapes[level].ActiveSlotCountHistogram[0])
+		}
 		// Sort descending by NodesCount (so popular nodeFormatSpecs appear first)
 		// Now with FormatTiny forced to the end of the sort (they have odd numbers of bytes, so we don't want them
 		// to result in the others being on odd byte boundaries)
