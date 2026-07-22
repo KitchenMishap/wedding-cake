@@ -16,14 +16,14 @@ type LevelsEncoderNf struct {
 var _ LevelsEncoder = (*LevelsEncoderNf)(nil)
 
 // EncodeSubTree The outer index represents the level, up to the last populated level.
-func (lenf *LevelsEncoderNf) EncodeSubTree(tree *shallowtreebyte.ShallowTree, tf *TreeFormat) ([][]byte, [][]byte) {
+func (lenf *LevelsEncoderNf) EncodeSubTree(tree *shallowtreebyte.ShallowTree, tf *TreeFormat) ([][]byte, [][]byte, LocalNodeIdType, byte) {
 	resultIndexBytes, resultNodesBytes := lenf.allocateLevelBytes(tf)
 	// Encode the indexBytes
 	lenf.serializeIndexBytes(tf, resultIndexBytes)
 	// Encode the nodesBytes
-	lenf.serializeNodesBytes(tree, tf, resultNodesBytes)
+	rootNodeId, rootNodeLevel := lenf.serializeNodesBytes(tree, tf, resultNodesBytes)
 
-	return resultIndexBytes, resultNodesBytes
+	return resultIndexBytes, resultNodesBytes, rootNodeId, rootNodeLevel
 }
 
 // allocateLevelBytes() calculates and allocates the number of bytes for indexBytes and for nodeBytes for each level
@@ -123,8 +123,9 @@ func (lenf *LevelsEncoderNf) serializeIndexBytes(tf *TreeFormat, indexBytes [][]
 	}
 }
 
+// Returns the root node id and level
 func (lenf *LevelsEncoderNf) serializeNodesBytes(tree *shallowtreebyte.ShallowTree,
-	tf *TreeFormat, nodesBytes [][]byte) {
+	tf *TreeFormat, nodesBytes [][]byte) (LocalNodeIdType, byte) {
 
 	levels := len(nodesBytes)
 
@@ -138,8 +139,10 @@ func (lenf *LevelsEncoderNf) serializeNodesBytes(tree *shallowtreebyte.ShallowTr
 	var nextLevelIdMap map[*shallowtreebyte.Node]LocalNodeIdType
 
 	// 3. Process bottom-up
+	lastProcessedNodeId := LocalNodeIdNoMatch
+	lastProcessedNodeLevel := levels - 1
 	for levelNum := levels - 1; levelNum >= 0; levelNum-- {
-		fmt.Printf("Processing level %d\n", levelNum)
+		//fmt.Printf("Processing level %d\n", levelNum)
 		currentLevelNodes := nodesByLevel[levelNum]
 		if len(currentLevelNodes) == 0 { // Because a level represents a number of NIBBLES of hash examined,
 			continue // but shallowtreebyte examines whole BYTES, we often have empty levels.
@@ -152,6 +155,8 @@ func (lenf *LevelsEncoderNf) serializeNodesBytes(tree *shallowtreebyte.ShallowTr
 		for _, node := range currentLevelNodes {
 			activeSlots := node.ActiveSlotsCount()
 			nodeID, _ := tf.AllocateIdAndSpecForNode(byte(node.Level), activeSlots)
+			lastProcessedNodeId = nodeID
+			lastProcessedNodeLevel = levelNum
 			currentLevelIdMap[node] = nodeID
 		}
 
@@ -193,6 +198,10 @@ func (lenf *LevelsEncoderNf) serializeNodesBytes(tree *shallowtreebyte.ShallowTr
 			panic("Expected nodes bytes to be full to capacity")
 		}
 	}
+	// Because we work from bottom up through levels, the last node processed is the root node
+	rootNodeId := lastProcessedNodeId
+	rootNodeLevel := lastProcessedNodeLevel
+	return rootNodeId, byte(rootNodeLevel)
 }
 
 func (lenf *LevelsEncoderNf) serializeLeafNode(leafNode *shallowtreebyte.LeafNode, bytes *[]byte) {
@@ -241,7 +250,7 @@ func (lenf *LevelsEncoderNf) serializeFullNode(slotsNode *shallowtreebyte.SlotsN
 	fullNodeSize := 1 + 1 + 256*nodeIdSize
 	const spareRoom = 1 + 1 + 256*8
 	var nodeBytes [spareRoom]byte
-	nodeBytes[0] = 0 // Padding
+	nodeBytes[0] = 0xAA // Padding
 	nodeBytes[1] = byte(slotsNode.HashByteIndex)
 	p := 2
 	for s := 0; s < 256; s++ {

@@ -66,8 +66,8 @@ func (flags *NibblesFlags) ClearFlagOrPanic(nibbleIndex NibbleIndex) {
 }
 
 func (flags *NibblesFlags) ClearFlagOrPanicByte(byteIndex ByteIndex) {
-	nibbleIndex0 := NibbleIndex(byteIndex * 2)
-	nibbleIndex1 := NibbleIndex(byteIndex*2 + 1)
+	nibbleIndex0 := NibbleIndex(byteIndex*2 + 1) // LS
+	nibbleIndex1 := NibbleIndex(byteIndex * 2)   // MS
 	flags.ClearFlagOrPanic(nibbleIndex0)
 	flags.ClearFlagOrPanic(nibbleIndex1)
 }

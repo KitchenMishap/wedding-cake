@@ -201,7 +201,7 @@ func (tns *TreeFormat) InitializeNodeIdAllocations() {
 				AvailableNodeIds:    LocalNodeIdType(nodes),
 				OriginalNodeIds:     LocalNodeIdType(nodes),
 			}
-			fmt.Printf("Allocating %d node ids for level %d group %d\n", nodes, level, group)
+			//fmt.Printf("Allocating %d node ids for level %d group %d\n", nodes, level, group)
 			// These will later tell us, for a given active slot count, which
 			// group should allocate us NodeIDs
 			start := tns.LevelSpecs[level].Groups[group].StartSlotsCount
@@ -268,9 +268,9 @@ func ChooseNodeFormatSpecsForTreeShape(treeShape *shallowtreebyte.TreeShape, stc
 			cost += nfg.Bytes
 		}
 		if cost > 0 {
-			fmt.Printf("Level %d optimization: Reduced nfgs -> %d, bytes %d -> %d\n",
-				level, len(nfgs), originalCost, cost)
-			fmt.Printf("ActiveSlotCountHistogram[0]: %d\n", treeShape.LevelShapes[level].ActiveSlotCountHistogram[0])
+			//fmt.Printf("Level %d optimization: Reduced nfgs -> %d, bytes %d -> %d\n",
+			//	level, len(nfgs), originalCost, cost)
+			//fmt.Printf("ActiveSlotCountHistogram[0]: %d\n", treeShape.LevelShapes[level].ActiveSlotCountHistogram[0])
 		}
 		// Sort descending by NodesCount (so popular nodeFormatSpecs appear first)
 		// Now with FormatTiny forced to the end of the sort (they have odd numbers of bytes, so we don't want them

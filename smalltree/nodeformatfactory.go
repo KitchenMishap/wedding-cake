@@ -9,7 +9,7 @@ type LevelsCodecNfFactory struct {
 // Check that implements
 var _ LevelsCodecFactory = (*LevelsCodecNfFactory)(nil)
 
-func NewLevelsCodecNfFactory(config *SmallTreeConfig) LevelsCodecFactory {
+func NewLevelsCodecNfFactory(config *SmallTreeConfig) *LevelsCodecNfFactory {
 	return &LevelsCodecNfFactory{
 		config: config,
 	}
@@ -25,4 +25,13 @@ func (lcnf *LevelsCodecNfFactory) MakeLevelDecoder(indexBytes []byte, nodesBytes
 	}
 	result.ConfigureWithIndexBytes(indexBytes)
 	return &result
+}
+
+func (lcnf *LevelsCodecNfFactory) MakeDecoderLevelsTest(indexBytes [][]byte, nodesBytes [][]byte, prefixNibbles byte,
+	rootNodeId LocalNodeIdType, rootLevel byte) DecoderLevelsTest {
+	decoders := make([]LevelDecoder, len(indexBytes))
+	for i := range indexBytes {
+		decoders[i] = lcnf.MakeLevelDecoder(indexBytes[i], nodesBytes[i])
+	}
+	return DecoderLevelsTest{levels: decoders, prefixNibbles: prefixNibbles, config: lcnf.config, rootNodeId: rootNodeId, rootLevel: rootLevel}
 }
