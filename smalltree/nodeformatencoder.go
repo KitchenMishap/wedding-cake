@@ -57,8 +57,15 @@ func (lenf *LevelsEncoderNf) allocateLevelBytes(tf *TreeFormat) ([][]byte, [][]b
 	resultIndexBytes := make([][]byte, lastPopulatedLevel+1)
 	resultNodesBytes := make([][]byte, lastPopulatedLevel+1)
 	for level := 0; level <= lastPopulatedLevel; level++ {
-		resultIndexBytes[level] = make([]byte, 0, indexBytesCount[level])
-		resultNodesBytes[level] = make([]byte, 0, nodesBytesCount[level])
+		// An indexBytesCount of exactly two must mean no nodespecs, and the two bytes must simply be zeroes.
+		// So it's more efficient in that case to treat the indexByteCount as itself zero!
+		if indexBytesCount[level] == 2 {
+			resultIndexBytes[level] = nil
+			resultNodesBytes[level] = nil
+		} else {
+			resultIndexBytes[level] = make([]byte, 0, indexBytesCount[level])
+			resultNodesBytes[level] = make([]byte, 0, nodesBytesCount[level])
+		}
 	}
 	return resultIndexBytes, resultNodesBytes
 }
@@ -72,55 +79,65 @@ func (lenf *LevelsEncoderNf) serializeIndexBytes(tf *TreeFormat, indexBytes [][]
 		formatSpecGroups := &tf.LevelSpecs[levelNum].Groups
 		levelIndexBytes := &indexBytes[levelNum]
 
-		// In each level, we start with two bytes representing the count of NodeSpec's ("group"s) that follow
-		var serializedGroupsCountBytes [2]byte
-		binary.LittleEndian.PutUint16(serializedGroupsCountBytes[:], uint16(len(*formatSpecGroups)))
-		*levelIndexBytes = append(*levelIndexBytes, serializedGroupsCountBytes[:]...)
+		if len(*formatSpecGroups) == 0 && *levelIndexBytes != nil {
+			panic("If there are no format specs then there should be no index bytes")
+		}
+		if *levelIndexBytes == nil && len(*formatSpecGroups) > 0 {
+			panic("If there are no index bytes then there should be no format specs")
+		}
+		if *levelIndexBytes != nil {
 
-		for groupIndex := range *formatSpecGroups {
-			group := (*formatSpecGroups)[groupIndex]
-			// Whilst we call this a "group", this has only come about by merging of individual
-			// formatSpecs in StoreConfig.DesignTreeFormat(). The "group" is in fact governed
-			// by a single FormatSpec, which we serialize here.
-			const spareRoom = 8 // The most space we will ever need
-			if nodesCountSize > spareRoom {
-				panic("Not enough bytes")
+			// In each level, we start with two bytes representing the count of NodeSpec's ("group"s) that follow
+			var serializedGroupsCountBytes [2]byte
+			binary.LittleEndian.PutUint16(serializedGroupsCountBytes[:], uint16(len(*formatSpecGroups)))
+			*levelIndexBytes = append(*levelIndexBytes, serializedGroupsCountBytes[:]...)
+
+			for groupIndex := range *formatSpecGroups {
+				group := (*formatSpecGroups)[groupIndex]
+				// Whilst we call this a "group", this has only come about by merging of individual
+				// formatSpecs in StoreConfig.DesignTreeFormat(). The "group" is in fact governed
+				// by a single FormatSpec, which we serialize here.
+				const spareRoom = 8 // The most space we will ever need
+				if nodesCountSize > spareRoom {
+					panic("Not enough bytes")
+				}
+				serializedNodesCountBytes := [spareRoom]byte{} // The count of nodes expressed as "some" bytes
+				lenf.config.NodeIdConfig.WriteID(serializedNodesCountBytes[:nodesCountSize], LocalNodeIdType(group.NodesCount))
+				*levelIndexBytes = append(*levelIndexBytes, serializedNodesCountBytes[:nodesCountSize]...)
+				serializedNodeSpecBytes := [4]byte{} // The details of the FormatSpecs for these nodes
+				switch group.Spec.Format {
+				case NodeFormatFull:
+					// Most significant bytes pair = zero, LS byte pair = number of bytes per node
+					// Number of bytes per node is (1) pad + (1) hashByteIndex + (256 * N) node ids
+					bytesPerNodeFull := 1 + 1 + 256*nodeIdSize
+					binary.LittleEndian.PutUint32(serializedNodeSpecBytes[:], uint32(bytesPerNodeFull))
+				case NodeFormatLeaf:
+					// Most significant bytes pair = zero, LS byte pair = number of bytes per node
+					// Number of bytes per node is (Reassurance bytes count) + (size of a hash index id)
+					bytesPerNodeLeaf := uint32(int(lenf.config.ReassuranceBytesCount) + hashIndexIdSize)
+					binary.LittleEndian.PutUint32(serializedNodeSpecBytes[:], bytesPerNodeLeaf)
+				case NodeFormatMedium:
+					// MS byte = zero, then slots byte, LS byte pair = number of bytes per node
+					slotsFields := uint32(group.Spec.SlotsCapacity) << 16
+					// Bytes per node = 1 (pad) + 1 (hash byte index) + 32 (slot flags) + N (node id) * slotsCapacity
+					bytesPerNodeField := uint32(1 + 1 + 32 + nodeIdSize*int(group.Spec.SlotsCapacity))
+					binary.LittleEndian.PutUint32(serializedNodeSpecBytes[:], slotsFields|bytesPerNodeField)
+				case NodeFormatTiny:
+					// MS byte slots capacity byte, then zero, LS byte pair = number of bytes per node
+					slotsFields := uint32(group.Spec.SlotsCapacity) << 24
+					// Bytes per node = 1 (hash byte index) + slots capacity * (1 (hash byte value) + N (node id))
+					bytesPerNodeField := uint32(1 + int(group.Spec.SlotsCapacity)*(1+nodeIdSize))
+					binary.LittleEndian.PutUint32(serializedNodeSpecBytes[:], slotsFields|bytesPerNodeField)
+				}
+				*levelIndexBytes = append(*levelIndexBytes, serializedNodeSpecBytes[:]...)
+			} // for groupIndex
+
+			// Check (because we can) that we have exactly reached capacity
+			if len(*levelIndexBytes) != cap(*levelIndexBytes) {
+				panic("Error in byte counting code")
 			}
-			serializedNodesCountBytes := [spareRoom]byte{} // The count of nodes expressed as "some" bytes
-			lenf.config.NodeIdConfig.WriteID(serializedNodesCountBytes[:nodesCountSize], LocalNodeIdType(group.NodesCount))
-			*levelIndexBytes = append(*levelIndexBytes, serializedNodesCountBytes[:nodesCountSize]...)
-			serializedNodeSpecBytes := [4]byte{} // The details of the FormatSpecs for these nodes
-			switch group.Spec.Format {
-			case NodeFormatFull:
-				// Most significant bytes pair = zero, LS byte pair = number of bytes per node
-				// Number of bytes per node is (1) pad + (1) hashByteIndex + (256 * N) node ids
-				bytesPerNodeFull := 1 + 1 + 256*nodeIdSize
-				binary.LittleEndian.PutUint32(serializedNodeSpecBytes[:], uint32(bytesPerNodeFull))
-			case NodeFormatLeaf:
-				// Most significant bytes pair = zero, LS byte pair = number of bytes per node
-				// Number of bytes per node is (Reassurance bytes count) + (size of a hash index id)
-				bytesPerNodeLeaf := uint32(int(lenf.config.ReassuranceBytesCount) + hashIndexIdSize)
-				binary.LittleEndian.PutUint32(serializedNodeSpecBytes[:], bytesPerNodeLeaf)
-			case NodeFormatMedium:
-				// MS byte = zero, then slots byte, LS byte pair = number of bytes per node
-				slotsFields := uint32(group.Spec.SlotsCapacity) << 16
-				// Bytes per node = 1 (pad) + 1 (hash byte index) + 32 (slot flags) + N (node id) * slotsCapacity
-				bytesPerNodeField := uint32(1 + 1 + 32 + nodeIdSize*int(group.Spec.SlotsCapacity))
-				binary.LittleEndian.PutUint32(serializedNodeSpecBytes[:], slotsFields|bytesPerNodeField)
-			case NodeFormatTiny:
-				// MS byte slots capacity byte, then zero, LS byte pair = number of bytes per node
-				slotsFields := uint32(group.Spec.SlotsCapacity) << 24
-				// Bytes per node = 1 (hash byte index) + slots capacity * (1 (hash byte value) + N (node id))
-				bytesPerNodeField := uint32(1 + int(group.Spec.SlotsCapacity)*(1+nodeIdSize))
-				binary.LittleEndian.PutUint32(serializedNodeSpecBytes[:], slotsFields|bytesPerNodeField)
-			}
-			*levelIndexBytes = append(*levelIndexBytes, serializedNodeSpecBytes[:]...)
-		}
-		// Check (because we can) that we have exactly reached capacity
-		if len(*levelIndexBytes) != cap(*levelIndexBytes) {
-			panic("Error in byte counting code")
-		}
-	}
+		} // if levelIndexBytes != nil
+	} // for levelNum
 }
 
 // Returns the root node id and level
