@@ -10,6 +10,7 @@ import (
 
 	"github.com/edsrzf/mmap-go"
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
+	"github.com/kitchenmishap/wedding-cake/types"
 
 	"github.com/kitchenmishap/wedding-cake/smalltree"
 )
@@ -19,7 +20,7 @@ type ForestRead struct {
 	tierIndex  byte
 	config     *smalltree.SmallTreeConfig
 
-	rootNodeIdForPrefix []smalltree.LocalNodeIdType
+	rootNodeIdForPrefix []types.LocalNodeId
 	rootLevelForPrefix  []byte
 
 	levels          []*ForestLevel // Some may be nil
@@ -61,11 +62,11 @@ func (fr *ForestRead) Open() error {
 	}
 
 	offset := 0
-	fr.rootNodeIdForPrefix = make([]smalltree.LocalNodeIdType, prefixIndexCount)
+	fr.rootNodeIdForPrefix = make([]types.LocalNodeId, prefixIndexCount)
 	fr.rootLevelForPrefix = make([]byte, prefixIndexCount)
 	for prefixIndex := 0; prefixIndex < prefixIndexCount; prefixIndex++ {
 		fr.rootLevelForPrefix[prefixIndex] = rootsBytes[offset]
-		fr.rootNodeIdForPrefix[prefixIndex] = smalltree.LocalNodeIdType(binary.LittleEndian.Uint16(rootsBytes[offset+1 : offset+3]))
+		fr.rootNodeIdForPrefix[prefixIndex] = types.LocalNodeId(binary.LittleEndian.Uint16(rootsBytes[offset+1 : offset+3]))
 		offset += 3
 	}
 
@@ -139,7 +140,7 @@ func (fr *ForestRead) Close() error {
 	return nil
 }
 
-func (fr *ForestRead) Lookup(hash []shallowtreebyte.NibbleVal) smalltree.HashIndexIdType {
+func (fr *ForestRead) Lookup(hash []shallowtreebyte.NibbleVal) types.LocalPi {
 	// Work out the prefix index from the first nibbles of the hash
 	prefixNibblesCount := shallowtreebyte.NibbleIndex(fr.tierIndex)
 	prefixIndex := PrefixIndexType(0)
@@ -170,7 +171,7 @@ func (fr *ForestRead) Lookup(hash []shallowtreebyte.NibbleVal) smalltree.HashInd
 				nibble1 := hash[byteIndexToExamine*2]
 				byt := byte(nibble0 | nibble1<<4)
 				if reassuranceBytes[reassuranceByteIndex] != byt {
-					return smalltree.HashIndexIdNoMatch
+					return types.LocalPiNoMatch
 				}
 			}
 			return ln.GetHashId()
@@ -182,8 +183,8 @@ func (fr *ForestRead) Lookup(hash []shallowtreebyte.NibbleVal) smalltree.HashInd
 			byt := nibble0 | nibble1<<4
 			unusedNibbleFlags.ClearFlagOrPanicByte(byteIndex)
 			nodeId = sn.GetNextNode(smalltree.SlotSelectorType(byt))
-			if nodeId == smalltree.LocalNodeIdNoMatch {
-				return smalltree.HashIndexIdNoMatch
+			if nodeId == types.LocalNodeIdNoMatch {
+				return types.LocalPiNoMatch
 			}
 			level += 2
 			decoder = fr.levels[level].decodersForPrefix[prefixIndex]

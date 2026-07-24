@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
+	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 func TestDesignTreeFormat(t *testing.T) {
@@ -16,8 +17,8 @@ func TestDesignTreeFormat(t *testing.T) {
 		HashNibbleLength:        64,
 		ReassuranceBytesCount:   2,
 		NodeFormatSpecsPerLevel: 10,
-		NodeIdConfig:            ID16[LocalNodeIdType]{},
-		HashIndexIdConfig:       ID16[HashIndexIdType]{},
+		NodeIdConfig:            ID16[types.LocalNodeId]{},
+		HashIndexIdConfig:       ID16[types.LocalPi]{},
 	}
 
 	count := 65535
@@ -26,7 +27,7 @@ func TestDesignTreeFormat(t *testing.T) {
 	for i := range count {
 		hash := helperRandomHash(int(stc.HashNibbleLength))
 		presentationArray[i].Hash = hash
-		presentationArray[i].PresentationIndex = shallowtreebyte.PiType(i)
+		presentationArray[i].PresentationIndex = types.LocalPi(i)
 	}
 	st := shallowtreebyte.GenerateShallowTree(presentationArray, prefixNibbles, stc.HashNibbleLength, shallowtreebyte.ByteIndex(stc.ReassuranceBytesCount), 0)
 	_ = DesignTreeFormat(st, &stc)

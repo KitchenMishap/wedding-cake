@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"slices"
 	"testing"
+
+	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 const reassuranceBytesCount = 2
@@ -13,7 +15,7 @@ func TestEmptyTree(t *testing.T) {
 	for prefixNibblesN := NibbleIndex(0); prefixNibblesN <= 4; prefixNibblesN++ {
 		for hashLength := NibbleIndex(8); hashLength <= NibbleIndex(128); hashLength += 8 {
 			st := GenerateShallowTree(make([]HashPi, 0), prefixNibblesN, hashLength, reassuranceBytesCount, 0)
-			if st.LookupHash(helperRandomHash(int(hashLength))) != PiNoMatch {
+			if st.LookupHash(helperRandomHash(int(hashLength))) != types.LocalPiNoMatch {
 				t.Error("LookupHash should return PiNoMatch, when looking up in an empty tree")
 			}
 		}
@@ -46,7 +48,7 @@ func TestSingleHashAbsent(t *testing.T) {
 			st := GenerateShallowTree(presentationArray, prefixNibblesN, hashLength, reassuranceBytesCount, 0)
 			hash = helperRandomHash(int(hashLength))
 			presentationIndex := st.LookupHash(hash)
-			if presentationIndex != PiNoMatch {
+			if presentationIndex != types.LocalPiNoMatch {
 				t.Error("Expected no match")
 			}
 		}
@@ -65,13 +67,13 @@ func Test65535Hashes(t *testing.T) {
 		for i := range count {
 			hash := helperRandomHash(int(hashLength))
 			presentationArray[i].Hash = hash
-			presentationArray[i].PresentationIndex = PiType(i)
+			presentationArray[i].PresentationIndex = types.LocalPi(i)
 		}
 		st := GenerateShallowTree(presentationArray, prefixHashBytesCount, hashLength, reassuranceBytesCount, lastByteOfPrefix)
 		for i := range count {
 			hash := presentationArray[i].Hash
 			presentationIndex := st.LookupHash(hash)
-			if presentationIndex == PiNoMatch {
+			if presentationIndex == types.LocalPiNoMatch {
 				t.Error("Lookup failed, returned SingleTreeNoMatch")
 			}
 			if !slices.Equal(presentationArray[presentationIndex].Hash, hash) {
@@ -80,7 +82,7 @@ func Test65535Hashes(t *testing.T) {
 		}
 		randomHash := helperRandomHash(int(hashLength))
 		presentationIndex := st.LookupHash(randomHash)
-		if presentationIndex != PiNoMatch {
+		if presentationIndex != types.LocalPiNoMatch {
 			fmt.Printf("Hash size %d: Random hash returned a match. Surprising? Yes as we now check the full hash!",
 				hashLength)
 		}

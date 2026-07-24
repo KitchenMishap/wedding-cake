@@ -5,6 +5,7 @@ import (
 	"math/bits"
 
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
+	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 // LevelDecoderNf the decoder (single level)
@@ -21,7 +22,7 @@ func (ldn *LevelDecoderNf) ConfigureWithIndexBytes(indexBytes []byte) {
 	ldn.indexBytes = indexBytes
 }
 
-func (ldn *LevelDecoderNf) GetNode(id LocalNodeIdType) Node {
+func (ldn *LevelDecoderNf) GetNode(id types.LocalNodeId) Node {
 	node := tempNode{}
 	success := ldn.extractNode(id, &node)
 	if !success {
@@ -60,7 +61,7 @@ type tempNode struct {
 
 // detailsIfLeaf returns (true, reassuranceBytes, presentationIndex) if is a leaf
 // returns (false, nil, 0) otherwise
-func (ldn *LevelDecoderNf) detailsIfLeaf(tn *tempNode) (bool, []byte, HashIndexIdType) {
+func (ldn *LevelDecoderNf) detailsIfLeaf(tn *tempNode) (bool, []byte, types.LocalPi) {
 
 	// A leaf node is identified as two MSB zero bytes followed by an appropriate two LSB bytes bytesCount
 	hashIndexIdSize := ldn.config.HashIndexIdConfig.StorageBytes()
@@ -104,8 +105,8 @@ func (ldn *LevelDecoderNf) hashByteIndexToExamine(tn *tempNode) (byte, byte, byt
 
 // ExtractNode extracts to an existing chunkNode to avoid a busy heap
 // Returns true for success
-func (ldn *LevelDecoderNf) extractNode(nodeId LocalNodeIdType, target *tempNode) bool {
-	currentSpecNodeId := LocalNodeIdType(0)
+func (ldn *LevelDecoderNf) extractNode(nodeId types.LocalNodeId, target *tempNode) bool {
+	currentSpecNodeId := types.LocalNodeId(0)
 	currentSpecNodeByteOffset := BytesCountType(0)
 	byteCount := BytesCountType(0)
 	// Read the number of format specs from start of indexBytes
@@ -168,7 +169,7 @@ type SlotsNodeNf struct {
 	mediumSlots            byte
 	tinySlots              byte
 	nodeBytes              []byte
-	nodeIdConfig           NByteIdConfig[LocalNodeIdType]
+	nodeIdConfig           NByteIdConfig[types.LocalNodeId]
 }
 
 // Check that implements
@@ -178,7 +179,7 @@ func (snnf *SlotsNodeNf) GetHashByteToExamine() shallowtreebyte.ByteIndex {
 	return snnf.hashByteIndexToExamine
 }
 
-func (snnf *SlotsNodeNf) GetNextNode(valSeen SlotSelectorType) LocalNodeIdType {
+func (snnf *SlotsNodeNf) GetNextNode(valSeen SlotSelectorType) types.LocalNodeId {
 	nodeIdSize := snnf.nodeIdConfig.StorageBytes()
 	// Is it a FormatFull?
 	if snnf.mediumSlots == 0 && snnf.tinySlots == 0 {
@@ -199,7 +200,7 @@ func (snnf *SlotsNodeNf) GetNextNode(valSeen SlotSelectorType) LocalNodeIdType {
 		flagsOffset := 2
 		flagsByte := snnf.nodeBytes[flagsOffset+int(byteNumber)]
 		if flagsByte&(1<<bitNumberWithinByte) == 0 {
-			return LocalNodeIdNoMatch
+			return types.LocalNodeIdNoMatch
 		}
 
 		// 2. Identify which of the 4 uint64 buckets our target bit belongs to
@@ -249,20 +250,20 @@ func (snnf *SlotsNodeNf) GetNextNode(valSeen SlotSelectorType) LocalNodeIdType {
 			}
 			offset += nodeIdSize
 		}
-		return LocalNodeIdNoMatch
+		return types.LocalNodeIdNoMatch
 	}
 	panic("Unrecognized format")
 }
 
 type LeafNodeNf struct {
-	hashIndexId      HashIndexIdType
+	hashIndexId      types.LocalPi
 	reassuranceBytes []byte
 }
 
 // Check that implements
 var _ LeafNode = (*LeafNodeNf)(nil)
 
-func (lnnf *LeafNodeNf) GetHashId() HashIndexIdType {
+func (lnnf *LeafNodeNf) GetHashId() types.LocalPi {
 	return lnnf.hashIndexId
 }
 func (lnnf *LeafNodeNf) GetReassuranceBytes() []byte {

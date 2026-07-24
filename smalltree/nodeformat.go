@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
+	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 // nodeformat.go is concerned with choosing, optimizing, and specifying a variety of variously
@@ -178,16 +179,16 @@ type TreeFormat struct {
 	LevelSpecs [129]LevelFormat
 }
 type NodeIdAllocation struct {
-	NextAvailableNodeId LocalNodeIdType
-	AvailableNodeIds    LocalNodeIdType
-	OriginalNodeIds     LocalNodeIdType
+	NextAvailableNodeId types.LocalNodeId
+	AvailableNodeIds    types.LocalNodeId
+	OriginalNodeIds     types.LocalNodeId
 }
 
 func (tns *TreeFormat) InitializeNodeIdAllocations() {
 	levels := len(tns.LevelSpecs)
 	for level := 0; level < levels; level++ {
 		// Node Id's are now PER LEVEL; you need a level AND a node id to identify a node
-		nodeId := LocalNodeIdType(0) // 0 is no longer a "special meaning" id
+		nodeId := types.LocalNodeId(0) // 0 is no longer a "special meaning" id
 
 		// Note that duplicates are no longer tolerated
 
@@ -198,8 +199,8 @@ func (tns *TreeFormat) InitializeNodeIdAllocations() {
 			nodes := tns.LevelSpecs[level].Groups[group].NodesCount
 			tns.LevelSpecs[level].NodeIdAllocations[group] = NodeIdAllocation{
 				NextAvailableNodeId: nodeId,
-				AvailableNodeIds:    LocalNodeIdType(nodes),
-				OriginalNodeIds:     LocalNodeIdType(nodes),
+				AvailableNodeIds:    types.LocalNodeId(nodes),
+				OriginalNodeIds:     types.LocalNodeId(nodes),
 			}
 			//fmt.Printf("Allocating %d node ids for level %d group %d\n", nodes, level, group)
 			// These will later tell us, for a given active slot count, which
@@ -209,12 +210,12 @@ func (tns *TreeFormat) InitializeNodeIdAllocations() {
 			for activeSlotsCount := start; activeSlotsCount < end; activeSlotsCount++ {
 				tns.LevelSpecs[level].SlotCountToGroup[activeSlotsCount] = byte(group)
 			}
-			nodeId += LocalNodeIdType(nodes)
+			nodeId += types.LocalNodeId(nodes)
 		}
 	}
 }
 
-func (tns *TreeFormat) AllocateIdAndSpecForNode(level byte, activeSlotsCount int) (LocalNodeIdType, NodeFormatSpec) {
+func (tns *TreeFormat) AllocateIdAndSpecForNode(level byte, activeSlotsCount int) (types.LocalNodeId, NodeFormatSpec) {
 	group := tns.LevelSpecs[level].SlotCountToGroup[activeSlotsCount]
 
 	// Read directly from the underlying slice index

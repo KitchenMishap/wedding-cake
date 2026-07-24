@@ -1,5 +1,7 @@
 package smalltree
 
+import "github.com/kitchenmishap/wedding-cake/types"
+
 // A factory for a codec pair for a "NodeFormats" (Nf) kind of node encoding
 
 type LevelsCodecNfFactory struct {
@@ -28,7 +30,7 @@ func (lcnf *LevelsCodecNfFactory) MakeLevelDecoder(indexBytes []byte, nodesBytes
 }
 
 func (lcnf *LevelsCodecNfFactory) MakeDecoderLevelsTest(indexBytes [][]byte, nodesBytes [][]byte, prefixNibbles byte,
-	rootNodeId LocalNodeIdType, rootLevel byte) DecoderLevelsTest {
+	rootNodeId types.LocalNodeId, rootLevel byte) DecoderLevelsTest {
 	decoders := make([]LevelDecoder, len(indexBytes))
 	for i := range indexBytes {
 		decoders[i] = lcnf.MakeLevelDecoder(indexBytes[i], nodesBytes[i])

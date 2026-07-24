@@ -2,6 +2,7 @@ package smalltree
 
 import (
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
+	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 // DecoderLevelsTest should only be used for testing as it holds everything in memory
@@ -9,11 +10,11 @@ type DecoderLevelsTest struct {
 	prefixNibbles byte
 	levels        []LevelDecoder
 	config        *SmallTreeConfig
-	rootNodeId    LocalNodeIdType
+	rootNodeId    types.LocalNodeId
 	rootLevel     byte
 }
 
-func (dlt DecoderLevelsTest) Lookup(hash []shallowtreebyte.NibbleVal) HashIndexIdType {
+func (dlt DecoderLevelsTest) Lookup(hash []shallowtreebyte.NibbleVal) types.LocalPi {
 	level := dlt.rootLevel
 	nodeId := dlt.rootNodeId
 
@@ -38,7 +39,7 @@ func (dlt DecoderLevelsTest) Lookup(hash []shallowtreebyte.NibbleVal) HashIndexI
 				nibble1 := hash[byteIndexToExamine*2]
 				byt := byte(nibble0 | nibble1<<4)
 				if reassuranceBytes[reassuranceByteIndex] != byt {
-					return HashIndexIdNoMatch
+					return types.LocalPiNoMatch
 				}
 			}
 			return ln.GetHashId()
@@ -50,8 +51,8 @@ func (dlt DecoderLevelsTest) Lookup(hash []shallowtreebyte.NibbleVal) HashIndexI
 			byt := nibble0 | nibble1<<4
 			unusedNibbleFlags.ClearFlagOrPanicByte(byteIndex)
 			nodeId = sn.GetNextNode(SlotSelectorType(byt))
-			if nodeId == LocalNodeIdNoMatch {
-				return HashIndexIdNoMatch
+			if nodeId == types.LocalNodeIdNoMatch {
+				return types.LocalPiNoMatch
 			}
 			level += 2
 			decoder = dlt.levels[level]

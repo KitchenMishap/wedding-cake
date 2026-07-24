@@ -1,11 +1,12 @@
 package smalltree
 
-import "github.com/kitchenmishap/wedding-cake/shallowtreebyte"
+import (
+	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
+	"github.com/kitchenmishap/wedding-cake/types"
+)
 
 // A codec is a way of encoding/decoding nodes to/from nodesBytes []byte
 // A codec is initialized from indexBytes []byte
-
-const LocalNodeIdNoMatch LocalNodeIdType = ^LocalNodeIdType(0)
 
 type SlotSelectorType byte
 
@@ -18,11 +19,11 @@ type LevelsCodecFactory interface {
 }
 
 type LevelsEncoder interface {
-	EncodeSubTree(*shallowtreebyte.ShallowTree, *TreeFormat) ([][]byte, [][]byte, LocalNodeIdType, byte)
+	EncodeSubTree(*shallowtreebyte.ShallowTree, *TreeFormat) ([][]byte, [][]byte, types.LocalNodeId, byte)
 }
 
 type LevelDecoder interface {
-	GetNode(id LocalNodeIdType) Node
+	GetNode(id types.LocalNodeId) Node
 }
 
 type Node interface {
@@ -32,11 +33,11 @@ type Node interface {
 }
 
 type LeafNode interface {
-	GetHashId() HashIndexIdType
+	GetHashId() types.LocalPi
 	GetReassuranceBytes() []byte
 }
 
 type SlotsNode interface {
-	GetNextNode(valSeen SlotSelectorType) LocalNodeIdType
+	GetNextNode(valSeen SlotSelectorType) types.LocalNodeId
 	GetHashByteToExamine() shallowtreebyte.ByteIndex
 }

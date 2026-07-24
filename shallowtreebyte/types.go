@@ -7,9 +7,3 @@ type NibbleIndex byte // For 512 bit hash this would be between 0 and 127
 
 type ByteVal byte   // Values 0 to 255
 type ByteIndex byte // For 512 bit hash this would be between 0 and 63
-
-// Presentation indices ("PI") are the order in which the hashes are presented to the shallowtree
-// In contrast to previous implementations, zero is a valid presentation index
-type PiType uint64
-
-const PiNoMatch PiType = 0xFFFFFFFFFFFFFFFF

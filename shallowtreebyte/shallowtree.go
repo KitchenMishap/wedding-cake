@@ -4,6 +4,8 @@ import (
 	"math"
 	"slices"
 	"sort"
+
+	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 // shallowtreebyte.ShallowTree is an adaptation of shallowtree.ShallowTree which forks nodes on bytes not nibbles.
@@ -48,9 +50,9 @@ type Node struct {
 }
 
 type LeafNode struct {
-	ReassuranceHashBytes []byte      // Additional bytes from the hash to give statistical reassurance
-	PresentationIndex    PiType      // The index that was initially presented with the hash corresponding to this leaf
-	Hash                 []NibbleVal // The entire hash for this leaf
+	ReassuranceHashBytes []byte        // Additional bytes from the hash to give statistical reassurance
+	PresentationIndex    types.LocalPi // The index that was initially presented with the hash corresponding to this leaf
+	Hash                 []NibbleVal   // The entire hash for this leaf
 }
 
 type SlotsNode struct {
@@ -72,7 +74,7 @@ func (sts Slot) IsEmpty() bool {
 // HashPi is used in the parameter to GenerateShallowTree()
 type HashPi struct {
 	Hash              []NibbleVal // len(Hash) must equal ShallowTree.NibbleLength
-	PresentationIndex PiType
+	PresentationIndex types.LocalPi
 }
 
 // GenerateShallowTree generates a tree from the supplied hashes and presentationIndices
@@ -147,13 +149,13 @@ func GenerateShallowTree(input []HashPi, prefixNibblesN NibbleIndex, nibblesLeng
 
 // LookupHash uses ShallowTree to lookup one presentationIndex if it exists.
 // If the tree contains no matches for the hash, PiNoMatch is returned.
-func (st *ShallowTree) LookupHash(hash []NibbleVal) PiType {
+func (st *ShallowTree) LookupHash(hash []NibbleVal) types.LocalPi {
 	if len(hash) != int(st.NibblesLength) {
 		panic("Wrong hash length")
 	}
 	// A tree that has no nodes (it contains no hashes), will always fail without even looking at the hash
 	if st.RootSlot.NextNode == nil {
-		return PiNoMatch
+		return types.LocalPiNoMatch
 	}
 	node := st.RootSlot.NextNode
 
@@ -178,7 +180,7 @@ func (st *ShallowTree) LookupHash(hash []NibbleVal) PiType {
 			}
 			// Check whole hash (not just the reassurance bytes)
 			if !slices.Equal(leafNode.Hash, hash) {
-				return PiNoMatch
+				return types.LocalPiNoMatch
 			}
 			return leafNode.PresentationIndex // A match
 		}
@@ -200,7 +202,7 @@ func (st *ShallowTree) LookupHash(hash []NibbleVal) PiType {
 		examinedByteValue := ByteVal(examinedNibble0 | examinedNibble1<<4)
 
 		if node.SlotsNode.Slots[examinedByteValue].IsEmpty() {
-			return PiNoMatch
+			return types.LocalPiNoMatch
 		}
 		node = node.SlotsNode.Slots[examinedByteValue].NextNode
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
 	"github.com/kitchenmishap/wedding-cake/smalltree"
+	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 func TestSingleTreeForestWrite(t *testing.T) {
@@ -26,8 +27,8 @@ func TestSingleTreeForestWrite(t *testing.T) {
 		HashNibbleLength:        64,
 		ReassuranceBytesCount:   2, // Two will occasionally give "random hash found"
 		NodeFormatSpecsPerLevel: 10,
-		NodeIdConfig:            smalltree.ID16[smalltree.LocalNodeIdType]{},
-		HashIndexIdConfig:       smalltree.ID16[smalltree.HashIndexIdType]{},
+		NodeIdConfig:            smalltree.ID16[types.LocalNodeId]{},
+		HashIndexIdConfig:       smalltree.ID16[types.LocalPi]{},
 	}
 
 	count := 65535
@@ -36,7 +37,7 @@ func TestSingleTreeForestWrite(t *testing.T) {
 	for i := range count {
 		hash := helperRandomHash(int(stc.HashNibbleLength))
 		presentationArray[i].Hash = hash
-		presentationArray[i].PresentationIndex = shallowtreebyte.PiType(i)
+		presentationArray[i].PresentationIndex = types.LocalPi(i)
 	}
 	st := shallowtreebyte.GenerateShallowTree(presentationArray, prefixNibbles, stc.HashNibbleLength, shallowtreebyte.ByteIndex(stc.ReassuranceBytesCount), 0)
 	tf := smalltree.DesignTreeFormat(st, &stc)
@@ -68,16 +69,16 @@ func TestSingleTreeForestWrite(t *testing.T) {
 
 	for i := range count {
 		pi := fr.Lookup(presentationArray[i].Hash)
-		if pi == smalltree.HashIndexIdNoMatch {
+		if pi == types.LocalPiNoMatch {
 			t.Errorf("Hash not found")
-		} else if pi != smalltree.HashIndexIdType(i) {
+		} else if pi != types.LocalPi(i) {
 			t.Errorf("Hash mismatch")
 		}
 	}
 	for range count {
 		hash := helperRandomHash(int(stc.HashNibbleLength))
 		pi := fr.Lookup(hash)
-		if pi != smalltree.HashIndexIdNoMatch {
+		if pi != types.LocalPiNoMatch {
 			fmt.Printf("Random hash found\n")
 		}
 	}
@@ -106,8 +107,8 @@ func TestMultiTreeForestWrite(t *testing.T) {
 		HashNibbleLength:        64,
 		ReassuranceBytesCount:   2, // Two will occasionally give "random hash found"
 		NodeFormatSpecsPerLevel: 10,
-		NodeIdConfig:            smalltree.ID16[smalltree.LocalNodeIdType]{},
-		HashIndexIdConfig:       smalltree.ID24[smalltree.HashIndexIdType]{},
+		NodeIdConfig:            smalltree.ID16[types.LocalNodeId]{},
+		HashIndexIdConfig:       smalltree.ID24[types.LocalPi]{},
 	}
 
 	count := 65535 * 16
@@ -120,7 +121,7 @@ func TestMultiTreeForestWrite(t *testing.T) {
 	for i := range count {
 		hash := helperRandomHash(int(stc.HashNibbleLength))
 		presentationArray[i].Hash = hash
-		presentationArray[i].PresentationIndex = shallowtreebyte.PiType(i)
+		presentationArray[i].PresentationIndex = types.LocalPi(i)
 
 		firstNibble := hash[0]
 		filteredArray[firstNibble] = append(filteredArray[firstNibble], presentationArray[i])
@@ -157,16 +158,16 @@ func TestMultiTreeForestWrite(t *testing.T) {
 
 	for i := range count {
 		pi := fr.Lookup(presentationArray[i].Hash)
-		if pi == smalltree.HashIndexIdNoMatch {
+		if pi == types.LocalPiNoMatch {
 			t.Errorf("Hash not found")
-		} else if pi != smalltree.HashIndexIdType(i) {
+		} else if pi != types.LocalPi(i) {
 			t.Errorf("Hash mismatch")
 		}
 	}
 	for range count {
 		hash := helperRandomHash(int(stc.HashNibbleLength))
 		pi := fr.Lookup(hash)
-		if pi != smalltree.HashIndexIdNoMatch {
+		if pi != types.LocalPiNoMatch {
 			fmt.Printf("Random hash found\n")
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
+	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 // LevelsEncoderNf the encoder (multiple levels)
@@ -16,7 +17,7 @@ type LevelsEncoderNf struct {
 var _ LevelsEncoder = (*LevelsEncoderNf)(nil)
 
 // EncodeSubTree The outer index represents the level, up to the last populated level.
-func (lenf *LevelsEncoderNf) EncodeSubTree(tree *shallowtreebyte.ShallowTree, tf *TreeFormat) ([][]byte, [][]byte, LocalNodeIdType, byte) {
+func (lenf *LevelsEncoderNf) EncodeSubTree(tree *shallowtreebyte.ShallowTree, tf *TreeFormat) ([][]byte, [][]byte, types.LocalNodeId, byte) {
 	resultIndexBytes, resultNodesBytes := lenf.allocateLevelBytes(tf)
 	// Encode the indexBytes
 	lenf.serializeIndexBytes(tf, resultIndexBytes)
@@ -102,7 +103,7 @@ func (lenf *LevelsEncoderNf) serializeIndexBytes(tf *TreeFormat, indexBytes [][]
 					panic("Not enough bytes")
 				}
 				serializedNodesCountBytes := [spareRoom]byte{} // The count of nodes expressed as "some" bytes
-				lenf.config.NodeIdConfig.WriteID(serializedNodesCountBytes[:nodesCountSize], LocalNodeIdType(group.NodesCount))
+				lenf.config.NodeIdConfig.WriteID(serializedNodesCountBytes[:nodesCountSize], types.LocalNodeId(group.NodesCount))
 				*levelIndexBytes = append(*levelIndexBytes, serializedNodesCountBytes[:nodesCountSize]...)
 				serializedNodeSpecBytes := [4]byte{} // The details of the FormatSpecs for these nodes
 				switch group.Spec.Format {
@@ -142,7 +143,7 @@ func (lenf *LevelsEncoderNf) serializeIndexBytes(tf *TreeFormat, indexBytes [][]
 
 // Returns the root node id and level
 func (lenf *LevelsEncoderNf) serializeNodesBytes(tree *shallowtreebyte.ShallowTree,
-	tf *TreeFormat, nodesBytes [][]byte) (LocalNodeIdType, byte) {
+	tf *TreeFormat, nodesBytes [][]byte) (types.LocalNodeId, byte) {
 
 	levels := len(nodesBytes)
 
@@ -153,10 +154,10 @@ func (lenf *LevelsEncoderNf) serializeNodesBytes(tree *shallowtreebyte.ShallowTr
 	})
 
 	// 2. We only need ONE map for the "level below us" at any given time
-	var nextLevelIdMap map[*shallowtreebyte.Node]LocalNodeIdType
+	var nextLevelIdMap map[*shallowtreebyte.Node]types.LocalNodeId
 
 	// 3. Process bottom-up
-	lastProcessedNodeId := LocalNodeIdNoMatch
+	lastProcessedNodeId := types.LocalNodeIdNoMatch
 	lastProcessedNodeLevel := levels - 1
 	for levelNum := levels - 1; levelNum >= 0; levelNum-- {
 		//fmt.Printf("Processing level %d\n", levelNum)
@@ -166,7 +167,7 @@ func (lenf *LevelsEncoderNf) serializeNodesBytes(tree *shallowtreebyte.ShallowTr
 		} // Furthermore, the nextLevelIdMap has to "skip" the empty level.
 		levelNodesBytes := &nodesBytes[levelNum]
 		// Create a fresh map for the current level allocations
-		currentLevelIdMap := make(map[*shallowtreebyte.Node]LocalNodeIdType, len(currentLevelNodes))
+		currentLevelIdMap := make(map[*shallowtreebyte.Node]types.LocalNodeId, len(currentLevelNodes))
 
 		// Pass A: Allocate IDs and populate our current level map
 		for _, node := range currentLevelNodes {
@@ -236,14 +237,10 @@ func (lenf *LevelsEncoderNf) serializeLeafNode(leafNode *shallowtreebyte.LeafNod
 		}
 	}
 	pi := leafNode.PresentationIndex
-	if pi == shallowtreebyte.PiNoMatch {
-		panic("Unexpected presentation index PiNoMatch")
-	}
-	piSmall := HashIndexIdType(pi)
 	hashIndexIdSize := lenf.config.HashIndexIdConfig.StorageBytes()
 	const spareRoom = 8
 	var hashIndexIdBytes [spareRoom]byte
-	lenf.config.HashIndexIdConfig.WriteID(hashIndexIdBytes[:hashIndexIdSize], piSmall)
+	lenf.config.HashIndexIdConfig.WriteID(hashIndexIdBytes[:hashIndexIdSize], pi)
 	*bytes = append(*bytes, hashIndexIdBytes[:hashIndexIdSize]...)
 }
 
@@ -259,7 +256,7 @@ func (lenf *LevelsEncoderNf) HashNibblesToHashBytes(nibbles []shallowtreebyte.Ni
 }
 
 func (lenf *LevelsEncoderNf) serializeFullNode(slotsNode *shallowtreebyte.SlotsNode,
-	nextLevelIdMap map[*shallowtreebyte.Node]LocalNodeIdType, bytes *[]byte) {
+	nextLevelIdMap map[*shallowtreebyte.Node]types.LocalNodeId, bytes *[]byte) {
 	// A full node is one byte padding (0), one byte hash byte index, and 256 N-byte nodeId slots.
 	// (a nodeId of 0 is used to indicate an empty slot)
 	// A full node is therefore fixed size (for a particular nodeIdsize configuration) and can be done in one append
@@ -289,7 +286,7 @@ func (lenf *LevelsEncoderNf) serializeFullNode(slotsNode *shallowtreebyte.SlotsN
 }
 
 func (lenf *LevelsEncoderNf) serializeMediumNode(slotsNode *shallowtreebyte.SlotsNode, spec *NodeFormatSpec,
-	nextLevelIdMap map[*shallowtreebyte.Node]LocalNodeIdType, bytes *[]byte) {
+	nextLevelIdMap map[*shallowtreebyte.Node]types.LocalNodeId, bytes *[]byte) {
 
 	// Total length matching our index bytes estimation:
 	// 1 (pad) + 1 (index) + 32 (bitmask flags) + N * SlotsCapacity
@@ -338,7 +335,7 @@ func (lenf *LevelsEncoderNf) serializeMediumNode(slotsNode *shallowtreebyte.Slot
 }
 
 func (lenf *LevelsEncoderNf) serializeTinyNode(slotsNode *shallowtreebyte.SlotsNode, spec *NodeFormatSpec,
-	nextLevelIdMap map[*shallowtreebyte.Node]LocalNodeIdType, bytes *[]byte) {
+	nextLevelIdMap map[*shallowtreebyte.Node]types.LocalNodeId, bytes *[]byte) {
 	// FormatTiny consists of one byte hash byte index (no padding this time) followed
 	// by a sequence of {one byte hash byte value, and N-bytes nodeId} with empty slots allowed (nodeId=0).
 	// Crucially, the length of the sequence is NOT NECESSARILY equal to the number of non-empty slots.

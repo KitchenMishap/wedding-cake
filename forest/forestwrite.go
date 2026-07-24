@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kitchenmishap/wedding-cake/smalltree"
+	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 // A forest is a folder on disk representing a hash lookup store for a contiguous sequence of hashes
@@ -75,7 +75,7 @@ func (fw *ForestWrite) EndWrite() error {
 }
 
 func (fw *ForestWrite) AppendTreeForPrefix(prefixIndex PrefixIndexType, indexBytes [][]byte, nodesBytes [][]byte,
-	rootNode smalltree.LocalNodeIdType, rootLevel byte) error {
+	rootNode types.LocalNodeId, rootLevel byte) error {
 	levels := len(indexBytes)
 	levelsNodes := len(nodesBytes)
 	if levelsNodes > levels {
