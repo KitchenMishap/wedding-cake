@@ -28,7 +28,7 @@ func TestDesignTreeFormat(t *testing.T) {
 		presentationArray[i].Hash = hash
 		presentationArray[i].PresentationIndex = shallowtreebyte.PiType(i)
 	}
-	st := shallowtreebyte.GenerateShallowTree(presentationArray, prefixNibbles, stc.HashNibbleLength, shallowtreebyte.NibbleIndex(stc.ReassuranceBytesCount*2), 0)
+	st := shallowtreebyte.GenerateShallowTree(presentationArray, prefixNibbles, stc.HashNibbleLength, shallowtreebyte.ByteIndex(stc.ReassuranceBytesCount), 0)
 	_ = DesignTreeFormat(st, &stc)
 }
 

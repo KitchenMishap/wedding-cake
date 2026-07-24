@@ -27,7 +27,7 @@ import (
 type ShallowTree struct {
 	NibblesLength                  NibbleIndex // eg 64 for SHA-256 hashes, 40 for RIPEMD-160
 	PrefixNibblesN                 NibbleIndex
-	ReassuranceNibblesCount        NibbleIndex
+	ReassuranceBytesCount          ByteIndex
 	NibbleValueExaminedPriorToTree NibbleVal
 
 	HashCount int
@@ -48,9 +48,9 @@ type Node struct {
 }
 
 type LeafNode struct {
-	ReassuranceHashNibbles []NibbleVal // Additional nibbles from the hash to give statistical reassurance
-	PresentationIndex      PiType      // The index that was initially presented with the hash corresponding to this leaf
-	Hash                   []NibbleVal // The entire hash for this leaf
+	ReassuranceHashBytes []byte      // Additional bytes from the hash to give statistical reassurance
+	PresentationIndex    PiType      // The index that was initially presented with the hash corresponding to this leaf
+	Hash                 []NibbleVal // The entire hash for this leaf
 }
 
 type SlotsNode struct {
@@ -77,7 +77,7 @@ type HashPi struct {
 
 // GenerateShallowTree generates a tree from the supplied hashes and presentationIndices
 func GenerateShallowTree(input []HashPi, prefixNibblesN NibbleIndex, nibblesLength NibbleIndex,
-	reassuranceNibbles NibbleIndex, prevNibbleValueExamined NibbleVal) *ShallowTree {
+	reassuranceBytes ByteIndex, prevNibbleValueExamined NibbleVal) *ShallowTree {
 	if prefixNibblesN > nibblesLength {
 		panic("PrefixNibblesN cannot exceed nibbleLength")
 	}
@@ -87,8 +87,8 @@ func GenerateShallowTree(input []HashPi, prefixNibblesN NibbleIndex, nibblesLeng
 	if nibblesLength&1 == 1 {
 		panic("Only even nibble lengths are supported")
 	}
-	if reassuranceNibbles > nibblesLength {
-		panic("Reassurance nibbles must be less than or equal to nibble length")
+	if int(reassuranceBytes) > int(nibblesLength)*2 {
+		panic("Reassurance bytes must be less than or equal to nibble length * 2")
 	}
 	for i := range input {
 		if input[i].Hash == nil {
@@ -101,7 +101,7 @@ func GenerateShallowTree(input []HashPi, prefixNibblesN NibbleIndex, nibblesLeng
 	result := ShallowTree{}
 	result.NibblesLength = nibblesLength
 	result.PrefixNibblesN = prefixNibblesN
-	result.ReassuranceNibblesCount = reassuranceNibbles
+	result.ReassuranceBytesCount = reassuranceBytes
 	result.HashCount = len(input)
 	result.NibbleValueExaminedPriorToTree = prevNibbleValueExamined
 	if len(input) == 0 {
@@ -115,8 +115,13 @@ func GenerateShallowTree(input []HashPi, prefixNibblesN NibbleIndex, nibblesLeng
 		// We need to point it to single leaf node
 		leafNode := LeafNode{}
 		leafNode.PresentationIndex = input[0].PresentationIndex
-		leafNode.ReassuranceHashNibbles = make([]NibbleVal, reassuranceNibbles)
-		copy(leafNode.ReassuranceHashNibbles, input[0].Hash[:reassuranceNibbles])
+		leafNode.ReassuranceHashBytes = make([]byte, reassuranceBytes)
+		for i := ByteIndex(0); i < reassuranceBytes; i++ {
+			msNibble := byte(input[0].Hash[i*2])
+			lsNibble := byte(input[0].Hash[i*2+1])
+			byt := lsNibble | msNibble<<4
+			leafNode.ReassuranceHashBytes[i] = byt
+		}
 		leafNode.Hash = make([]NibbleVal, nibblesLength)
 		copy(leafNode.Hash, input[0].Hash)
 		node := Node{}
@@ -373,25 +378,27 @@ func (st *ShallowTree) recurseGenerateNode(inputCopy []HashPi,
 			leafNode.Hash = make([]NibbleVal, st.NibblesLength)
 			copy(leafNode.Hash, inputCopy[startIndex].Hash)
 
-			// The reassurance hash bytes are (sequentially) a maximum of st.ReassuranceBytesCount
+			// The reassurance hash BYTES (not nibbles) are (sequentially) a maximum of st.ReassuranceBytesCount
 			// bytes, out of the hash bytes that haven't been examined yet
-			leafNode.ReassuranceHashNibbles = make([]NibbleVal, 0, st.ReassuranceNibblesCount)
+			leafNode.ReassuranceHashBytes = make([]byte, 0, st.ReassuranceBytesCount)
 			localUnusedFlags := unusedNibbles.Copy()
-			ind := NibbleIndex(0)
-			for b := NibbleIndex(0); b < st.ReassuranceNibblesCount; b++ {
+			ind := ByteIndex(0)
+			for b := ByteIndex(0); b < st.ReassuranceBytesCount; b++ {
 				// Abort if all nibbles have been examined
 				if localUnusedFlags.IsEmpty() {
 					break
 				}
 				// Find the next hash byte that has not yet been examined
-				for localUnusedFlags.FlagVal(ind) == false {
+				for localUnusedFlags.FlagValByte(ind) == false {
 					ind++
 				}
 				// Mark it as examined in our local copy
-				localUnusedFlags.ClearFlagOrPanic(ind)
+				localUnusedFlags.ClearFlagOrPanicByte(ind)
 				// Record the byte value
-				nibbleValue := inputCopy[startIndex].Hash[ind]
-				leafNode.ReassuranceHashNibbles = append(leafNode.ReassuranceHashNibbles, nibbleValue)
+				nibbleValue0 := inputCopy[startIndex].Hash[ind*2+1] // LS
+				nibbleValue1 := inputCopy[startIndex].Hash[ind*2]   // MS
+				byteValue := byte(nibbleValue0 | nibbleValue1<<4)
+				leafNode.ReassuranceHashBytes = append(leafNode.ReassuranceHashBytes, byteValue)
 			}
 
 			newNode := Node{}

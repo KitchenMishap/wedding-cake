@@ -227,7 +227,7 @@ func (lenf *LevelsEncoderNf) serializeLeafNode(leafNode *shallowtreebyte.LeafNod
 	// In ShallowTree, it is clever enough to give fewer reassurance bytes than configured, in cases where
 	// there are not enough bytes left to examine in the hash. But our serialized leaf node has a fixed
 	// capacity for these, so we need to pad them.
-	reassuranceBytes := lenf.HashNibblesToHashBytes(leafNode.ReassuranceHashNibbles)
+	reassuranceBytes := leafNode.ReassuranceHashBytes
 	reassurancePadding := lenf.config.ReassuranceBytesCount - byte(len(reassuranceBytes))
 	*bytes = append(*bytes, reassuranceBytes...)
 	if reassurancePadding > 0 {

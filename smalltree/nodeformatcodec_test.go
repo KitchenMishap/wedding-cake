@@ -27,7 +27,7 @@ func TestCodecNf(t *testing.T) {
 		presentationArray[i].Hash = hash
 		presentationArray[i].PresentationIndex = shallowtreebyte.PiType(i)
 	}
-	st := shallowtreebyte.GenerateShallowTree(presentationArray, prefixNibbles, stc.HashNibbleLength, shallowtreebyte.NibbleIndex(stc.ReassuranceBytesCount*2), 0)
+	st := shallowtreebyte.GenerateShallowTree(presentationArray, prefixNibbles, stc.HashNibbleLength, shallowtreebyte.ByteIndex(stc.ReassuranceBytesCount), 0)
 	tf := DesignTreeFormat(st, &stc)
 
 	lcf := NewLevelsCodecNfFactory(&stc)
@@ -44,7 +44,7 @@ func TestCodecNf(t *testing.T) {
 			t.Errorf("Hash mismatch")
 		}
 	}
-	for _ = range count {
+	for range count {
 		hash := helperRandomHash(int(stc.HashNibbleLength))
 		pi := dlt.Lookup(hash)
 		if pi != HashIndexIdNoMatch {
