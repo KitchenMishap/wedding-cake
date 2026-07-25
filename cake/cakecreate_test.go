@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/kitchenmishap/wedding-cake/inputtierbake"
+	"github.com/kitchenmishap/wedding-cake/smalltree"
 	"github.com/kitchenmishap/wedding-cake/types"
 )
 
@@ -114,6 +116,16 @@ func TestCakeAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	tier, err := inputtierbake.FreezeInputForBaking(folderPath, smalltree.ID16[types.LocalPi]{}, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = tier.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 func helperRandomHashByte(hashLength int) []byte {

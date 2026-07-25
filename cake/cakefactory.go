@@ -30,7 +30,7 @@ func NewCakeFactory(folderPath string) *CakeFactory {
 }
 
 func (cf *CakeFactory) Exists() bool {
-	filePath := filepath.Join(cf.folderPath, "InputTier", "Offset.txt")
+	filePath := filepath.Join(cf.folderPath, "InputTierOffset.txt")
 	file, err := os.Open(filePath)
 	if err == nil {
 		_ = file.Close()
@@ -40,54 +40,7 @@ func (cf *CakeFactory) Exists() bool {
 }
 
 func (cf CakeFactory) Create() error {
-	folderPath := filepath.Join(cf.folderPath, "InputTier")
-	err := os.MkdirAll(folderPath, os.ModePerm)
-	if err != nil {
-		return err
-	}
-
-	filePath := filepath.Join(cf.folderPath, "InputTier", "Offset.txt")
-	file, err := os.Create(filePath)
-	defer func() {
-		_ = file.Close()
-	}()
-	if err != nil {
-		return err
-	}
-	// Single ascii 0
-	zero := [1]byte{'0'}
-	_, err = file.Write(zero[:])
-	if err != nil {
-		return err
-	}
-	err = file.Close()
-	if err != nil {
-		return err
-	}
-
-	// Empty file
-	filePath = filepath.Join(cf.folderPath, "InputTier", "HashesOrder.bin")
-	file, err = os.Create(filePath)
-	if err != nil {
-		return err
-	}
-	err = file.Close()
-	if err != nil {
-		return err
-	}
-
-	// Empty file in folder
-	folderPath = filepath.Join(cf.folderPath, "InputTier", "HashPrefix")
-	err = os.MkdirAll(folderPath, os.ModePerm)
-	if err != nil {
-		return err
-	}
-	filePath = filepath.Join(folderPath, "HashSuffix.bin")
-	file, err = os.Create(filePath)
-	if err != nil {
-		return err
-	}
-	err = file.Close()
+	err := inputtier.CreateInputTierFiles(cf.folderPath, 0)
 	if err != nil {
 		return err
 	}

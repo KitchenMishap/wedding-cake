@@ -2,6 +2,7 @@ package inputtier
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ import (
 // InputTier has a representation on disk.
 
 type InputTier struct {
-	cakeFolderPath string
+	numberedFolderPath string
 
 	hashesOrderFile *os.File // Remains open for append whilst InputTier is open
 	hashSuffixFile  *os.File // Remains open for append whilst InputTier is open
@@ -36,20 +37,42 @@ type InputTier struct {
 func OpenInputTier(cakeFolderPath string, localPiWriter smalltree.NByteIdConfig[types.LocalPi],
 	hashBytesLength int) (*InputTier, error) {
 	result := InputTier{}
-	result.cakeFolderPath = cakeFolderPath
 	result.localPiWriter = localPiWriter
 	result.hashBytesLength = hashBytesLength
-	// The following call operates without a fully populated InputTier
-	err := result.readHashes()
+
+	// First we read the offset from a parent file. This will help us determine the InputTier_xxx foldername
+	fName := filepath.Join(cakeFolderPath, "InputTierOffset.txt")
+	file, err := os.Open(fName)
 	if err != nil {
 		return nil, err
 	}
-	fName := filepath.Join(cakeFolderPath, "InputTier", "HashesOrder.bin")
+	defer func() {
+		_ = file.Close()
+	}()
+	contents, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	offset, err := strconv.Atoi(string(contents))
+	if err != nil {
+		return nil, err
+	}
+	result.piOffset = types.PiOffset(offset)
+	folder := fmt.Sprintf("InputTier_%d", result.piOffset)
+	folderName := filepath.Join(cakeFolderPath, folder)
+	result.numberedFolderPath = folderName
+
+	// The following call operates without a fully populated InputTier
+	err = result.readHashes()
+	if err != nil {
+		return nil, err
+	}
+	fName = filepath.Join(result.numberedFolderPath, "HashesOrder.bin")
 	result.hashesOrderFile, err = os.OpenFile(fName, os.O_APPEND, 0644)
 	if err != nil {
 		return nil, err
 	}
-	fName = filepath.Join(cakeFolderPath, "InputTier", "HashPrefix", "HashSuffix.bin")
+	fName = filepath.Join(result.numberedFolderPath, "HashPrefix", "HashSuffix.bin")
 	result.hashSuffixFile, err = os.OpenFile(fName, os.O_APPEND, 0644)
 	if err != nil {
 		return nil, err
@@ -146,23 +169,7 @@ func (it *InputTier) GetHashAtIndex(gpi types.GlobalPi) ([]byte, bool) {
 func (it *InputTier) readHashes() error {
 	byteSize := it.localPiWriter.StorageBytes()
 
-	offsetFName := filepath.Join(it.cakeFolderPath, "InputTier", "Offset.txt")
-	offsetFile, err := os.Open(offsetFName)
-	defer func() { _ = offsetFile.Close() }()
-	if err != nil {
-		return err
-	}
-	offsetBytes, err := io.ReadAll(offsetFile)
-	if err != nil {
-		return err
-	}
-	offset, err := strconv.Atoi(string(offsetBytes))
-	if err != nil {
-		return err
-	}
-	it.piOffset = types.PiOffset(offset)
-
-	orderFName := filepath.Join(it.cakeFolderPath, "InputTier", "HashesOrder.bin")
+	orderFName := filepath.Join(it.numberedFolderPath, "HashesOrder.bin")
 	orderFile, err := os.Open(orderFName)
 	defer func() { _ = orderFile.Close() }()
 	if err != nil {
@@ -174,7 +181,7 @@ func (it *InputTier) readHashes() error {
 	}
 	numPis := len(orderBytes) / byteSize
 
-	suffixFName := filepath.Join(it.cakeFolderPath, "InputTier", "HashPrefix", "HashSuffix.bin")
+	suffixFName := filepath.Join(it.numberedFolderPath, "HashPrefix", "HashSuffix.bin")
 	suffixFile, err := os.Open(suffixFName)
 	defer func() { _ = suffixFile.Close() }()
 	if err != nil {
