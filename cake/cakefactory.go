@@ -5,13 +5,15 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kitchenmishap/wedding-cake/inputtier"
 	"github.com/kitchenmishap/wedding-cake/smalltree"
 	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 type CakeFactory struct {
-	folderPath string
-	config     smalltree.SmallTreeConfig
+	folderPath      string
+	config          smalltree.SmallTreeConfig
+	hashBytesLength int
 }
 
 func NewCakeFactory(folderPath string) *CakeFactory {
@@ -23,11 +25,12 @@ func NewCakeFactory(folderPath string) *CakeFactory {
 	result.config.NodeFormatSpecsPerLevel = 10
 	result.config.NodeIdConfig = smalltree.ID16[types.LocalNodeId]{}
 	result.config.HashIndexIdConfig = smalltree.ID24[types.LocalPi]{}
+	result.hashBytesLength = 32
 	return &result
 }
 
 func (cf *CakeFactory) Exists() bool {
-	filePath := filepath.Join(cf.folderPath, "Offset.txt")
+	filePath := filepath.Join(cf.folderPath, "InputTier", "Offset.txt")
 	file, err := os.Open(filePath)
 	if err == nil {
 		_ = file.Close()
@@ -37,7 +40,13 @@ func (cf *CakeFactory) Exists() bool {
 }
 
 func (cf CakeFactory) Create() error {
-	filePath := filepath.Join(cf.folderPath, "Offset.txt")
+	folderPath := filepath.Join(cf.folderPath, "InputTier")
+	err := os.MkdirAll(folderPath, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	filePath := filepath.Join(cf.folderPath, "InputTier", "Offset.txt")
 	file, err := os.Create(filePath)
 	defer func() {
 		_ = file.Close()
@@ -57,7 +66,7 @@ func (cf CakeFactory) Create() error {
 	}
 
 	// Empty file
-	filePath = filepath.Join(cf.folderPath, "HashesOrder.bin")
+	filePath = filepath.Join(cf.folderPath, "InputTier", "HashesOrder.bin")
 	file, err = os.Create(filePath)
 	if err != nil {
 		return err
@@ -68,7 +77,7 @@ func (cf CakeFactory) Create() error {
 	}
 
 	// Empty file in folder
-	folderPath := filepath.Join(cf.folderPath, "HashPrefix")
+	folderPath = filepath.Join(cf.folderPath, "InputTier", "HashPrefix")
 	err = os.MkdirAll(folderPath, os.ModePerm)
 	if err != nil {
 		return err
@@ -92,6 +101,13 @@ func (cf *CakeFactory) Open() (*Cake, error) {
 	result := Cake{}
 	result.folderPath = cf.folderPath
 	result.config = &cf.config
+
+	// InputTier is CURRENTLY configured with 16 bid LocalPi's
+	var err error
+	result.inputTier, err = inputtier.OpenInputTier(cf.folderPath, smalltree.ID16[types.LocalPi]{}, cf.hashBytesLength)
+	if err != nil {
+		return nil, err
+	}
 
 	return &result, nil
 }

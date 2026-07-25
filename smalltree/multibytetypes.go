@@ -6,7 +6,7 @@ import "encoding/binary"
 
 // IdTypeConstraint defines the underlying unsigned integers we support parameterizing on
 type IdTypeConstraint interface {
-	~uint16 | ~uint32 | ~uint64
+	~uint64
 }
 
 // NByteIdConfig handles the dynamic bytes sizing for any underlying IdTypeConstraint
@@ -30,7 +30,13 @@ func (ID16[T]) WriteID(b []byte, id T) {
 func (ID16[T]) WriteAllOnes(b []byte) {
 	binary.LittleEndian.PutUint16(b[:2], ^uint16(0))
 }
-func (ID16[T]) ReadID(b []byte) T { return T(binary.LittleEndian.Uint16(b[:2])) }
+func (ID16[T]) ReadID(b []byte) T {
+	result := T(binary.LittleEndian.Uint16(b[:2]))
+	if result == T(^uint16(0)) {
+		return ^T(0)
+	}
+	return result
+}
 
 // ID24 implements 24-bit IDs (3 bytes)
 type ID24[T IdTypeConstraint] struct{}
@@ -64,7 +70,11 @@ func (ID24[T]) WriteAllOnes(b []byte) {
 }
 
 func (ID24[T]) ReadID(b []byte) T {
-	return T(uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16))
+	result := T(uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16))
+	if result == T(0xFFFFFF) {
+		return ^T(0)
+	}
+	return result
 }
 
 // ID32 implements 32-bit IDs (4 bytes)
@@ -83,7 +93,13 @@ func (ID32[T]) WriteAllOnes(b []byte) {
 	b[2] = 0xFF
 	b[3] = 0xFF
 }
-func (ID32[T]) ReadID(b []byte) T { return T(binary.LittleEndian.Uint32(b[:4])) }
+func (ID32[T]) ReadID(b []byte) T {
+	result := T(binary.LittleEndian.Uint32(b[:4]))
+	if result == T(^uint32(0)) {
+		return ^T(0)
+	}
+	return result
+}
 
 // ID40 implements 40-bit node IDs (5 bytes, allows access to over a trillion nodes - we won't need more!)
 type ID40[T IdTypeConstraint] struct{}
@@ -113,6 +129,10 @@ func (ID40[T]) WriteAllOnes(b []byte) {
 	b[4] = 0xFF
 }
 func (ID40[T]) ReadID(b []byte) T {
-	return T(b[0]) | (T(b[1]) << 8) | (T(b[2]) << 16) |
+	result := T(b[0]) | (T(b[1]) << 8) | (T(b[2]) << 16) |
 		T(b[3])<<24 | T(b[4])<<32
+	if result == T(0xFFFFFFFFFF) {
+		return ^T(0)
+	}
+	return result
 }
