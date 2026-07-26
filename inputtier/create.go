@@ -8,6 +8,7 @@ import (
 	"github.com/kitchenmishap/wedding-cake/types"
 )
 
+// CreateInputTierFiles Note that TierOffsets.txt will need updating after this call
 func CreateInputTierFiles(cakeFolderPath string, offset types.PiOffset) error {
 	folderName := fmt.Sprintf("InputTier_%d", offset)
 	folderPath := filepath.Join(cakeFolderPath, folderName)
@@ -39,21 +40,6 @@ func CreateInputTierFiles(cakeFolderPath string, offset types.PiOffset) error {
 		return err
 	}
 	err = file.Close()
-	if err != nil {
-		return err
-	}
-
-	// Now we have created the folder successfully, write the offset to a parent index file
-	filePath = filepath.Join(cakeFolderPath, "InputTierOffset.txt")
-	file, err = os.Create(filePath)
-	defer func() {
-		_ = file.Close()
-	}()
-	if err != nil {
-		return err
-	}
-	// ascii decimal offset
-	_, err = fmt.Fprintf(file, "%d", offset)
 	if err != nil {
 		return err
 	}

@@ -1,90 +1,76 @@
 package inputtierbake
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
-
-	"github.com/kitchenmishap/wedding-cake/inputtier"
-	"github.com/kitchenmishap/wedding-cake/smalltree"
-	"github.com/kitchenmishap/wedding-cake/types"
 )
 
-// FreezeInputForBaking renames the InputTier folder and creates a new one.
-// InputTier must be closed before calling this.
-// Returns a new opened InputTier
-func FreezeInputTierForBaking(cakeFolderPath string,
-	localPiWriter smalltree.NByteIdConfig[types.LocalPi],
-	hashBytesLength int) (*inputtier.InputTier, error) {
-
-	originalPi, err := readOffsetFromFile(cakeFolderPath)
-	if err != nil {
-		return nil, err
-	}
-	numberedFolderName := fmt.Sprintf("InputTier_%d", originalPi)
-	numberedFolderPath := filepath.Join(cakeFolderPath, numberedFolderName)
-
-	// Create a READONLY file to prevent anyone from opening for write
+func BakeFrozenInputTierToDonutFolder(numberedFolderPath string, tier0DonutFolder string) error {
+	// Check for READONLY file
 	fNameRo := filepath.Join(numberedFolderPath, "READONLY")
-	file, err := os.Create(fNameRo)
+	_, err := os.Stat(fNameRo)
 	if err != nil {
-		return nil, err
+		panic("Input tier folder should have READONLY flag file")
+	}
+
+	// Mark the folder as being baked with a BAKING flag file
+	bakingFlagFileName := filepath.Join(tier0DonutFolder, "BAKING")
+	file, err := os.Create(bakingFlagFileName)
+	if err != nil {
+		return err
 	}
 	err = file.Close()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	piCount, err := countPisInFile(numberedFolderPath, localPiWriter)
+	folderName := filepath.Join(tier0DonutFolder, "HashPrefix")
+	err = os.MkdirAll(folderName, 0755)
 	if err != nil {
-		return nil, err
-	}
-	newPi := originalPi + types.PiOffset(piCount)
-
-	err = inputtier.CreateInputTierFiles(cakeFolderPath, newPi)
-	if err != nil {
-		return nil, err
+		return err
 	}
 
-	tier, err := inputtier.OpenInputTier(cakeFolderPath, localPiWriter, hashBytesLength)
+	// The new donut (folder) has the same offset as the input tier at the time of baking.
+	// Therefore the IDs in te HashesOrder.bin and HashSuffix.bin remain the same.
+	// The files just need to be copied
+	sourceFile := filepath.Join(numberedFolderPath, "HashesOrder.bin")
+	destFile := filepath.Join(tier0DonutFolder, "HashesOrder.bin")
+	err = copyFileStream(sourceFile, destFile)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return tier, nil
+
+	sourceFile = filepath.Join(numberedFolderPath, "HashPrefix", "HashSuffix.bin")
+	destFile = filepath.Join(tier0DonutFolder, "HashPrefix", "HashSuffix.bin")
+	err = copyFileStream(sourceFile, destFile)
+	if err != nil {
+		return err
+	}
+
+	// It is now baked. Remove the flag file
+	err = os.Remove(bakingFlagFileName)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func readOffsetFromFile(cakeFolderPath string) (types.PiOffset, error) {
-	// Read the previous offset from the file
-	offsetFName := filepath.Join(cakeFolderPath, "InputTierOffset.txt")
-	offsetFile, err := os.Open(offsetFName)
-	defer func() { _ = offsetFile.Close() }()
+func copyFileStream(src, dst string) error {
+	in, err := os.Open(src)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	offsetBytes, err := io.ReadAll(offsetFile)
-	if err != nil {
-		return 0, err
-	}
-	offset, err := strconv.Atoi(string(offsetBytes))
-	if err != nil {
-		return 0, err
-	}
-	return types.PiOffset(offset), nil
-}
+	defer func() { _ = in.Close() }()
 
-func countPisInFile(numberedFolderPath string, localPiWriter smalltree.NByteIdConfig[types.LocalPi]) (uint64, error) {
-	// Count the pi's represented in the original input tier
-	orderFName := filepath.Join(numberedFolderPath, "HashesOrder.bin")
-	offsetFile, err := os.Open(orderFName)
-	defer func() { _ = offsetFile.Close() }()
+	out, err := os.Create(dst)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	info, err := offsetFile.Stat()
-	if err != nil {
-		return 0, err
-	}
-	return uint64(info.Size() / int64(localPiWriter.StorageBytes())), nil
+	defer func() { _ = out.Close() }()
+
+	// Streams chunks from source to destination without loading everything into memory
+	_, err = io.Copy(out, in)
+	return err
 }

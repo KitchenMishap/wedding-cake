@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/kitchenmishap/wedding-cake/smalltree"
 	"github.com/kitchenmishap/wedding-cake/types"
@@ -26,7 +25,7 @@ type InputTier struct {
 	hashSuffixFile  *os.File // Remains open for append whilst InputTier is open
 
 	localPiWriter   smalltree.NByteIdConfig[types.LocalPi]
-	hashBytesLength int
+	hashBytesLength byte
 
 	piOffset           types.PiOffset
 	hashBytesToLocalPi map[string]types.LocalPi
@@ -35,36 +34,19 @@ type InputTier struct {
 }
 
 func OpenInputTier(cakeFolderPath string, localPiWriter smalltree.NByteIdConfig[types.LocalPi],
-	hashBytesLength int) (*InputTier, error) {
+	piOffset types.PiOffset, hashBytesLength byte) (*InputTier, error) {
 	result := InputTier{}
 	result.localPiWriter = localPiWriter
 	result.hashBytesLength = hashBytesLength
 
-	// First we read the offset from a parent file. This will help us determine the InputTier_xxx foldername
-	fName := filepath.Join(cakeFolderPath, "InputTierOffset.txt")
-	file, err := os.Open(fName)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-	contents, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-	offset, err := strconv.Atoi(string(contents))
-	if err != nil {
-		return nil, err
-	}
-	result.piOffset = types.PiOffset(offset)
+	result.piOffset = piOffset
 	folder := fmt.Sprintf("InputTier_%d", result.piOffset)
 	folderName := filepath.Join(cakeFolderPath, folder)
 	result.numberedFolderPath = folderName
 
 	// Check for READONLY file
 	fNameRo := filepath.Join(result.numberedFolderPath, "READONLY")
-	_, err = os.Stat(fNameRo)
+	_, err := os.Stat(fNameRo)
 	if err == nil {
 		panic("Input tier folder is read only")
 	}
@@ -74,7 +56,7 @@ func OpenInputTier(cakeFolderPath string, localPiWriter smalltree.NByteIdConfig[
 	if err != nil {
 		return nil, err
 	}
-	fName = filepath.Join(result.numberedFolderPath, "HashesOrder.bin")
+	fName := filepath.Join(result.numberedFolderPath, "HashesOrder.bin")
 	result.hashesOrderFile, err = os.OpenFile(fName, os.O_APPEND, 0644)
 	if err != nil {
 		return nil, err
@@ -173,6 +155,10 @@ func (it *InputTier) GetHashAtIndex(gpi types.GlobalPi) ([]byte, bool) {
 	return []byte(it.hashBytes[localPi]), true
 }
 
+func (it *InputTier) CountPresentationIndices() uint64 {
+	return uint64(len(it.hashBytes)) // Includes the "gaps" that don't have hashes
+}
+
 func (it *InputTier) readHashes() error {
 	byteSize := it.localPiWriter.StorageBytes()
 
@@ -209,14 +195,14 @@ func (it *InputTier) readHashes() error {
 		offsetOrder := i * byteSize
 		localPi1 := it.localPiWriter.ReadID(orderBytes[offsetOrder : offsetOrder+byteSize])
 		if localPi1 != types.LocalPiNoMatch {
-			hash := suffixBytes[offsetSuffix : offsetSuffix+it.hashBytesLength]
-			localPi2 := it.localPiWriter.ReadID(suffixBytes[offsetSuffix+it.hashBytesLength : offsetSuffix+it.hashBytesLength+byteSize])
+			hash := suffixBytes[offsetSuffix : offsetSuffix+int(it.hashBytesLength)]
+			localPi2 := it.localPiWriter.ReadID(suffixBytes[offsetSuffix+int(it.hashBytesLength) : offsetSuffix+int(it.hashBytesLength)+byteSize])
 			if localPi1 != localPi2 {
 				return errors.New("LocalPi mismatch in InputTier files")
 			}
 			it.hashBytes[i] = string(hash)
 			it.hashBytesToLocalPi[string(hash)] = localPi1
-			offsetSuffix += it.hashBytesLength + byteSize
+			offsetSuffix += int(it.hashBytesLength) + byteSize
 		} else {
 			it.hashBytes[i] = ""
 		}
