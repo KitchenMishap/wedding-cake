@@ -43,6 +43,16 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 	if err != nil {
 		return err
 	}
+	if c.inputTier.CountPresentationIndices() == 65535 {
+		path, offset, err := c.FreezeInputTierForBaking()
+		if err != nil {
+			return err
+		}
+		err = c.BakeFrozenInputTier(path, offset)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
