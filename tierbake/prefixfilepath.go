@@ -41,6 +41,9 @@ func formatNibble(nibble shallowtreebyte.NibbleVal) string {
 
 func formatFilePathFilename(prefixNibbles []shallowtreebyte.NibbleVal, filenameDigits byte, folderNameDigits []byte) (string, string) {
 	length := len(prefixNibbles)
+	if length == 0 {
+		return "", "/"
+	}
 	filename := ""
 	for digit := range int(filenameDigits) {
 		filename += formatNibble(prefixNibbles[length-2+digit])
