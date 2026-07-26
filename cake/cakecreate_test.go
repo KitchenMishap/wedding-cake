@@ -88,24 +88,22 @@ func TestCakeAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	/*
-		for i := 0; i < 9; i++ {
-			hashExpected := hashes[i]
-			piExpected := pis[i]
 
-			piFound := cake.inputTier.LookupHash(hashExpected)
-			if piFound != piExpected {
-				t.Fatal("Hash lookup failed")
-			}
-			hashFound, ok := cake.inputTier.GetHashAtIndex(piExpected)
-			if !ok {
-				t.Fatal("GetHashAtIndex failed")
-			}
-			if !bytes.Equal(hashExpected, hashFound) {
-				t.Fatal("GetHashAtIndex mismatch")
-			}
+	for i := 0; i < count; i++ {
+		hashExpected := hashes[i]
+		piExpected := pis[i]
+
+		piFound, err := cake.LookupHash(hashExpected)
+		if err != nil {
+			t.Fatal(err)
 		}
-	*/
+		if piFound == types.GlobalPresentationIndexNoMatch {
+			t.Fatal("Hash not found")
+		}
+		if piFound != piExpected {
+			t.Fatal("Hash lookup mismatch")
+		}
+	}
 	err = cake.Close()
 	if err != nil {
 		t.Fatal(err)

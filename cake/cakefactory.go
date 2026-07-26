@@ -94,5 +94,13 @@ func (cf *CakeFactory) Open() (*Cake, error) {
 		return nil, err
 	}
 
+	for t := range result.tierOffsets {
+		tier, err := result.openTier(byte(t), result.tierOffsets[t], result.inputTierPiWriter)
+		if err != nil {
+			return nil, err
+		}
+		result.tiers = append(result.tiers, tier)
+	}
+
 	return &result, nil
 }
