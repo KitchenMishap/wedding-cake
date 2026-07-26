@@ -1,4 +1,4 @@
-package inputtierbake
+package tierbake
 
 import (
 	"io"

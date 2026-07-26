@@ -1,10 +1,12 @@
 package cake
 
 import (
+	"fmt"
 	"math/rand"
 	"os"
 	"testing"
 
+	"github.com/kitchenmishap/wedding-cake/smalltree"
 	"github.com/kitchenmishap/wedding-cake/types"
 )
 
@@ -104,6 +106,23 @@ func TestCakeAppend(t *testing.T) {
 			t.Fatal("Hash lookup mismatch")
 		}
 	}
+
+	donutOffsets := cake.tiers[0].offsets
+	path, offset, err := cake.FreezeTierForBaking(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sourceLocalPiWriter := smalltree.ID16[types.LocalPi]{}
+	destLocalPiWriter := smalltree.ID24[types.LocalPi]{}
+
+	donutPath, err := cake.BakeFrozenTier(path, offset, donutOffsets, 0,
+		sourceLocalPiWriter, destLocalPiWriter)
+	fmt.Println(donutPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	err = cake.Close()
 	if err != nil {
 		t.Fatal(err)

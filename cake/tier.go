@@ -39,18 +39,18 @@ func (t *Tier) VerifyHash(hash []shallowtreebyte.NibbleVal, candidatePi types.Lo
 
 	// First look in HashesOrder.bin for an index into the other file
 	hashOrderPath := filepath.Join(t.folderPath, fmt.Sprintf("Donut%X", donutIndex), "HashesOrder.bin")
-	file, err := os.Open(hashOrderPath)
-	defer func() { _ = file.Close() }()
+	file1, err := os.Open(hashOrderPath)
+	defer func() { _ = file1.Close() }()
 	if err != nil {
 		return false, err
 	}
 	byteCount := t.localPiWriter.StorageBytes()
-	_, err = file.Seek(int64(candidatePi)*int64(byteCount), 0)
+	_, err = file1.Seek(int64(candidatePi)*int64(byteCount), 0)
 	if err != nil {
 		return false, err
 	}
 	bytes := make([]byte, byteCount)
-	_, err = file.Read(bytes)
+	_, err = file1.Read(bytes)
 	if err != nil {
 		return false, err
 	}
@@ -58,18 +58,18 @@ func (t *Tier) VerifyHash(hash []shallowtreebyte.NibbleVal, candidatePi types.Lo
 
 	// Now look in Suffix file
 	suffixPath := filepath.Join(t.folderPath, fmt.Sprintf("Donut%X", donutIndex), "HashPrefix", "HashSuffix.bin")
-	file, err = os.Open(suffixPath)
-	defer func() { _ = file.Close() }()
+	file2, err := os.Open(suffixPath)
+	defer func() { _ = file2.Close() }()
 	if err != nil {
 		return false, err
 	}
 	fieldSize := len(hash)/2 + byteCount
-	_, err = file.Seek(int64(index)*int64(fieldSize), 0)
+	_, err = file2.Seek(int64(index)*int64(fieldSize), 0)
 	if err != nil {
 		return false, err
 	}
 	bytes = make([]byte, len(hash)/2)
-	_, err = file.Read(bytes)
+	_, err = file2.Read(bytes)
 	if err != nil {
 		return false, err
 	}
@@ -85,7 +85,15 @@ func (t *Tier) VerifyHash(hash []shallowtreebyte.NibbleVal, candidatePi types.Lo
 	return true, nil
 }
 
+/*func (t *Tier) CountPresentationIndices() uint64 {
+	for d := range t.donuts {
+		t.donuts[d].CountPresentationIndices()
+	}
+	return t.localPiWriter.CountPresentationIndices()
+}*/
+
 func (t *Tier) Close() error {
+	fmt.Println("Closing donuts of tier")
 	for d := range t.donuts {
 		err := t.donuts[d].Close()
 		if err != nil {

@@ -89,4 +89,15 @@ func TestFormatFilePathFilename(t *testing.T) {
 	if folderName != "/" {
 		t.Fatal("Expected folderName to be /")
 	}
+
+	nibbleCount = byte(1)
+	filenameDigits, foldersDigits = CalculatePrefixPattern(nibbleCount, digitsPerFolder)
+	filename, folderName = formatFilePathFilename([]shallowtreebyte.NibbleVal{5}, filenameDigits, foldersDigits)
+	if filename != "5" {
+		t.Fatal("Expected filename to be 5")
+	}
+	if folderName != "/" {
+		t.Fatal("Expected folderName to be /")
+	}
+
 }

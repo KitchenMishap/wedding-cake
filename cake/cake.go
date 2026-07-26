@@ -9,9 +9,9 @@ import (
 
 	"github.com/kitchenmishap/wedding-cake/forest"
 	"github.com/kitchenmishap/wedding-cake/inputtier"
-	"github.com/kitchenmishap/wedding-cake/inputtierbake"
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
 	"github.com/kitchenmishap/wedding-cake/smalltree"
+	"github.com/kitchenmishap/wedding-cake/tierbake"
 	"github.com/kitchenmishap/wedding-cake/types"
 )
 
@@ -35,11 +35,13 @@ func (c *Cake) Close() error {
 	}
 
 	for t := range c.tiers {
-		err = c.tiers[t].Close()
-		if err != nil {
-			return err
+		if c.tiers[t] != nil {
+			err = c.tiers[t].Close()
+			if err != nil {
+				return err
+			}
+			c.tiers[t] = nil
 		}
-		c.tiers[t] = nil
 	}
 
 	// Prevent this cake from being used
@@ -139,12 +141,81 @@ func (c *Cake) FreezeInputTierForBaking() (string, types.PiOffset, error) {
 	return numberedFolderPath, frozenOffset, nil
 }
 
+func (c *Cake) FreezeTierForBaking(tierIndex byte) (string, types.PiOffset, error) {
+	//piCount := c.tiers[tierIndex].CountPresentationIndices()
+	//newPiOffset := c.inputTierOffset + types.PiOffset(piCount)
+	frozenOffset := c.tierOffsets[tierIndex]
+
+	numberedFolderName := fmt.Sprintf("Tier%d_%d", tierIndex, frozenOffset)
+	numberedFolderPath := filepath.Join(c.folderPath, numberedFolderName)
+
+	//err := inputtier.CreateInputTierFiles(c.folderPath, newPiOffset)
+	//if err != nil {
+	//	return "", 0, err
+	//}
+
+	//c.inputTierOffset = newPiOffset
+	//offsets := make([]types.PiOffset, 1, len(c.tierOffsets)+1)
+	//offsets[0] = newPiOffset
+	//offsets = append(offsets, c.tierOffsets...)
+	//filePath := filepath.Join(c.folderPath, "TierOffsets.txt")
+	//err = c.writePiOffsetsFile(filePath, offsets)
+	//if err != nil {
+	//	return "", 0, err
+	//}
+
+	err := c.tiers[tierIndex].Close()
+	if err != nil {
+		return "", 0, err
+	}
+	c.tiers[tierIndex] = nil
+	//c.inputTier, err = inputtier.OpenInputTier(c.folderPath, c.inputTierPiWriter, newPiOffset, c.hashBytesLength)
+	//if err != nil {
+	//	return "", 0, err
+	//}
+
+	// Create a READONLY file to prevent anyone from opening for write
+	fNameRo := filepath.Join(numberedFolderPath, "READONLY")
+	file, err := os.Create(fNameRo)
+	if err != nil {
+		return "", 0, err
+	}
+	err = file.Close()
+	if err != nil {
+		return "", 0, err
+	}
+
+	return numberedFolderPath, frozenOffset, nil
+}
+
+func (c *Cake) BakeFrozenTier(numberedPath string, offset types.PiOffset,
+	donutOffsets []types.PiOffset, tierIndex byte,
+	sourceLocalPiWriter smalltree.NByteIdConfig[types.LocalPi],
+	destLocalPiWriter smalltree.NByteIdConfig[types.LocalPi]) (string, error) {
+
+	donutPath, err := c.newDonutFolder(tierIndex+1, offset)
+	if err != nil {
+		return "", err
+	}
+
+	err = tierbake.BakeFrozenTierToDonutFolder(numberedPath, donutPath, tierIndex,
+		sourceLocalPiWriter, destLocalPiWriter, c.hashBytesLength, donutOffsets, offset)
+	if err != nil {
+		return "", err
+	}
+	err = os.RemoveAll(numberedPath)
+	if err != nil {
+		return "", err
+	}
+	return donutPath, nil
+}
+
 func (c *Cake) BakeFrozenInputTier(numberedPath string, offset types.PiOffset) (string, error) {
 	donutPath, err := c.newDonutFolder(0, offset)
 	if err != nil {
 		return "", err
 	}
-	err = inputtierbake.BakeFrozenInputTierToDonutFolder(numberedPath, donutPath)
+	err = tierbake.BakeFrozenInputTierToDonutFolder(numberedPath, donutPath)
 	if err != nil {
 		return "", err
 	}
@@ -210,6 +281,9 @@ func (c *Cake) IceTheDonut(donutPath string) error {
 
 func (c *Cake) openTier(tierIndex byte, piOffset types.PiOffset,
 	localPiWriter smalltree.NByteIdConfig[types.LocalPi]) (*Tier, error) {
+
+	fmt.Println("Opening tier")
+
 	tierFolderPath := filepath.Join(c.folderPath, fmt.Sprintf("Tier%d_%d", tierIndex, piOffset))
 	donutOffsetsFilePath := filepath.Join(tierFolderPath, "DonutOffsets.txt")
 	donutOffsets, err := c.readPiOffsetsFile(donutOffsetsFilePath)
@@ -242,8 +316,8 @@ func (c *Cake) openDonut(tierIndex byte, tierFolderPath string, donutIndex int) 
 	return fr, nil
 }
 
-func (c *Cake) newDonutFolder(tierIndex int, piOffset types.PiOffset) (string, error) {
-	if len(c.tierOffsets) < tierIndex+1 {
+func (c *Cake) newDonutFolder(tierIndex byte, piOffset types.PiOffset) (string, error) {
+	if len(c.tierOffsets) < int(tierIndex+1) {
 		// New tier folder
 		tierFolder := fmt.Sprintf("Tier%d_%d", tierIndex, piOffset)
 		tierFolderPath := filepath.Join(c.folderPath, tierFolder)
