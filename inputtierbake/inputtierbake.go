@@ -15,7 +15,7 @@ import (
 // FreezeInputForBaking renames the InputTier folder and creates a new one.
 // InputTier must be closed before calling this.
 // Returns a new opened InputTier
-func FreezeInputForBaking(cakeFolderPath string,
+func FreezeInputTierForBaking(cakeFolderPath string,
 	localPiWriter smalltree.NByteIdConfig[types.LocalPi],
 	hashBytesLength int) (*inputtier.InputTier, error) {
 
@@ -25,6 +25,18 @@ func FreezeInputForBaking(cakeFolderPath string,
 	}
 	numberedFolderName := fmt.Sprintf("InputTier_%d", originalPi)
 	numberedFolderPath := filepath.Join(cakeFolderPath, numberedFolderName)
+
+	// Create a READONLY file to prevent anyone from opening for write
+	fNameRo := filepath.Join(numberedFolderPath, "READONLY")
+	file, err := os.Create(fNameRo)
+	if err != nil {
+		return nil, err
+	}
+	err = file.Close()
+	if err != nil {
+		return nil, err
+	}
+
 	piCount, err := countPisInFile(numberedFolderPath, localPiWriter)
 	if err != nil {
 		return nil, err

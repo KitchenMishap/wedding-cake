@@ -62,6 +62,13 @@ func OpenInputTier(cakeFolderPath string, localPiWriter smalltree.NByteIdConfig[
 	folderName := filepath.Join(cakeFolderPath, folder)
 	result.numberedFolderPath = folderName
 
+	// Check for READONLY file
+	fNameRo := filepath.Join(result.numberedFolderPath, "READONLY")
+	_, err = os.Stat(fNameRo)
+	if err == nil {
+		panic("Input tier folder is read only")
+	}
+
 	// The following call operates without a fully populated InputTier
 	err = result.readHashes()
 	if err != nil {

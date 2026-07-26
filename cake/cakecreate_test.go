@@ -117,7 +117,7 @@ func TestCakeAppend(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tier, err := inputtierbake.FreezeInputForBaking(folderPath, smalltree.ID16[types.LocalPi]{}, 32)
+	tier, err := inputtierbake.FreezeInputTierForBaking(folderPath, smalltree.ID16[types.LocalPi]{}, 32)
 	if err != nil {
 		t.Fatal(err)
 	}
