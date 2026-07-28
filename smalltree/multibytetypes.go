@@ -17,6 +17,36 @@ type NByteIdConfig[T IdTypeConstraint] interface {
 	ReadID(b []byte) T
 }
 
+// ID0 implements 0-bit IDs (0 bytes) !!
+type ID0[T IdTypeConstraint] struct{}
+
+func (ID0[T]) StorageBytes() int      { return 0 }
+func (ID0[T]) WriteID(b []byte, id T) {}
+func (ID0[T]) WriteAllOnes(b []byte)  {}
+func (ID0[T]) ReadID(b []byte) T      { return 0 }
+
+// ID8 implements 8-bit IDs (1 byte)
+type ID8[T IdTypeConstraint] struct{}
+
+func (ID8[T]) StorageBytes() int { return 1 }
+func (ID8[T]) WriteID(b []byte, id T) {
+	b[0] = byte(id)
+	binary.LittleEndian.PutUint16(b[:2], uint16(id))
+	if id-T(byte(id)) != 0 {
+		panic("ID8.WriteID: id is too large")
+	}
+}
+func (ID8[T]) WriteAllOnes(b []byte) {
+	b[0] = 0xFF
+}
+func (ID8[T]) ReadID(b []byte) T {
+	result := T(b[0])
+	if result == 0xFF {
+		return ^T(0)
+	}
+	return result
+}
+
 // ID16 implements 16-bit IDs (2 bytes)
 type ID16[T IdTypeConstraint] struct{}
 
@@ -43,6 +73,9 @@ type ID24[T IdTypeConstraint] struct{}
 
 func (ID24[T]) StorageBytes() int { return 3 }
 func (ID24[T]) WriteID(b []byte, id T) {
+	if id == 0xFFFFFF {
+		panic("Writing all ones")
+	}
 	val := uint32(id)
 	b[0] = byte(val)
 	b[1] = byte(val >> 8)

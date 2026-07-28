@@ -24,7 +24,7 @@ type InputTier struct {
 	hashesOrderFile *os.File // Remains open for append whilst InputTier is open
 	hashSuffixFile  *os.File // Remains open for append whilst InputTier is open
 
-	localPiWriter   smalltree.NByteIdConfig[types.LocalPi]
+	config          *smalltree.SmallTreeConfig
 	hashBytesLength byte
 
 	piOffset           types.PiOffset
@@ -33,10 +33,10 @@ type InputTier struct {
 	hashBytes []string
 }
 
-func OpenInputTier(cakeFolderPath string, localPiWriter smalltree.NByteIdConfig[types.LocalPi],
+func OpenInputTier(cakeFolderPath string, tierConfig *smalltree.SmallTreeConfig,
 	piOffset types.PiOffset, hashBytesLength byte) (*InputTier, error) {
 	result := InputTier{}
-	result.localPiWriter = localPiWriter
+	result.config = tierConfig
 	result.hashBytesLength = hashBytesLength
 
 	result.piOffset = piOffset
@@ -91,7 +91,8 @@ func (it *InputTier) Close() error {
 // AppendHash gpi's must be presented in order, but gaps are permitted.
 // These gaps are to accommodate gpi's of hashes that turned out to be duplicates (detected in an external mechanism).
 func (it *InputTier) AppendHash(gpi types.GlobalPi, hash []byte) error {
-	piByteCount := uint64(it.localPiWriter.StorageBytes())
+	piByteCount := uint64(it.config.LocalPiRWriter.StorageBytes())
+	suffixIndexByteCount := uint64(it.config.SuffixIndexRWriter.StorageBytes())
 
 	localPi := gpi.ToLocalPi(it.piOffset)
 
@@ -100,24 +101,35 @@ func (it *InputTier) AppendHash(gpi types.GlobalPi, hash []byte) error {
 
 	// Append to the hashesOrderFile.
 	// Presentation index gaps are represented by types.LocalPiNoMatch (all ones)
-	const spareBytes = 8 // Enough room for the biggest localPiWriter output
-	bytesToWrite := make([]byte, gap*piByteCount+spareBytes)
+
+	// Usually we would write prefixIndex, suffixIndex pairs (suffix indices for the input tier are equal to localPi's)
+	// However in the case of the input tier, prefix indices are length zero!
+	if it.config.PrefixIndexRWriter.StorageBytes() != 0 {
+		panic("Input tier expects zero length prefix index configuration")
+	}
+
+	bytesToWriteLength := (gap + 1) * suffixIndexByteCount
+	bytesToWrite := make([]byte, bytesToWriteLength)
 	offset := uint64(0)
 	for i := uint64(0); i < gap; i++ {
-		it.localPiWriter.WriteAllOnes(bytesToWrite[offset:])
-		offset += piByteCount
+		it.config.SuffixIndexRWriter.WriteAllOnes(bytesToWrite[offset:])
+		offset += suffixIndexByteCount
 	}
-	it.localPiWriter.WriteID(bytesToWrite[offset:], localPi)
-	localPiOffset := offset
-	offset += piByteCount
-	_, err := it.hashesOrderFile.Write(bytesToWrite[:offset])
+	// For the input tier, suffix indices are equal to LocalPi values.
+	// But they might not be encoded with the same number of bytes!
+	it.config.SuffixIndexRWriter.WriteID(bytesToWrite[offset:], types.SuffixIndex(localPi))
+	offset += suffixIndexByteCount
+	_, err := it.hashesOrderFile.Write(bytesToWrite[:bytesToWriteLength])
 	if err != nil {
 		return err
 	}
 
 	// Append to the hashSuffixFile (hash and localPi)
-	entry := append(hash, bytesToWrite[localPiOffset:localPiOffset+piByteCount]...)
-	_, err = it.hashSuffixFile.Write(entry)
+	const spareBytes = 64 + 8
+	bytesToWriteSuffix := [spareBytes]byte{}
+	copy(bytesToWriteSuffix[:len(hash)], hash)
+	it.config.LocalPiRWriter.WriteID(bytesToWriteSuffix[len(hash):], localPi)
+	_, err = it.hashSuffixFile.Write(bytesToWriteSuffix[0 : uint64(len(hash))+piByteCount])
 	if err != nil {
 		return err
 	}
@@ -160,7 +172,8 @@ func (it *InputTier) CountPresentationIndices() uint64 {
 }
 
 func (it *InputTier) readHashes() error {
-	byteSize := it.localPiWriter.StorageBytes()
+	byteSizeSuffix := it.config.SuffixIndexRWriter.StorageBytes()
+	byteSizeLocalPi := it.config.LocalPiRWriter.StorageBytes()
 
 	orderFName := filepath.Join(it.numberedFolderPath, "HashesOrder.bin")
 	orderFile, err := os.Open(orderFName)
@@ -172,7 +185,10 @@ func (it *InputTier) readHashes() error {
 	if err != nil {
 		return err
 	}
-	numPis := len(orderBytes) / byteSize
+	if len(orderBytes)%byteSizeSuffix != 0 {
+		panic("Wrong size file")
+	}
+	numPis := len(orderBytes) / byteSizeSuffix
 
 	suffixFName := filepath.Join(it.numberedFolderPath, "HashPrefix", "HashSuffix.bin")
 	suffixFile, err := os.Open(suffixFName)
@@ -192,17 +208,17 @@ func (it *InputTier) readHashes() error {
 	// For such items, an entry is NOT present in the HashSuffix.bin file
 	offsetSuffix := 0
 	for i := 0; i < numPis; i++ {
-		offsetOrder := i * byteSize
-		localPi1 := it.localPiWriter.ReadID(orderBytes[offsetOrder : offsetOrder+byteSize])
-		if localPi1 != types.LocalPiNoMatch {
+		offsetOrder := i * byteSizeSuffix
+		localPi1 := it.config.SuffixIndexRWriter.ReadID(orderBytes[offsetOrder : offsetOrder+byteSizeSuffix])
+		if uint64(localPi1) != uint64(types.LocalPiNoMatch) {
 			hash := suffixBytes[offsetSuffix : offsetSuffix+int(it.hashBytesLength)]
-			localPi2 := it.localPiWriter.ReadID(suffixBytes[offsetSuffix+int(it.hashBytesLength) : offsetSuffix+int(it.hashBytesLength)+byteSize])
-			if localPi1 != localPi2 {
+			localPi2 := it.config.LocalPiRWriter.ReadID(suffixBytes[offsetSuffix+int(it.hashBytesLength) : offsetSuffix+int(it.hashBytesLength)+byteSizeLocalPi])
+			if uint64(localPi1) != uint64(localPi2) {
 				return errors.New("LocalPi mismatch in InputTier files")
 			}
 			it.hashBytes[i] = string(hash)
-			it.hashBytesToLocalPi[string(hash)] = localPi1
-			offsetSuffix += int(it.hashBytesLength) + byteSize
+			it.hashBytesToLocalPi[string(hash)] = localPi2
+			offsetSuffix += int(it.hashBytesLength) + byteSizeLocalPi
 		} else {
 			it.hashBytes[i] = ""
 		}

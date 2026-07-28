@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/kitchenmishap/wedding-cake/forest"
 	"github.com/kitchenmishap/wedding-cake/inputtier"
@@ -17,64 +18,109 @@ import (
 
 type Cake struct {
 	folderPath      string
-	config          *smalltree.SmallTreeConfig
+	config          [5]*smalltree.SmallTreeConfig
 	hashBytesLength byte
 
-	inputTierPiWriter smalltree.NByteIdConfig[types.LocalPi]
-	inputTier         *inputtier.InputTier
-	inputTierOffset   types.PiOffset
+	openInputTier *inputtier.InputTier
 
-	tierOffsets []types.PiOffset
-	tiers       []*Tier
+	tiersInfo TiersInfo
+	openTiers [5]*Tier
 }
 
 func (c *Cake) Close() error {
-	err := c.inputTier.Close()
-	if err != nil {
-		return err
+	if c.openInputTier != nil {
+		err := c.openInputTier.Close()
+		if err != nil {
+			return err
+		}
+		c.openInputTier = nil
 	}
 
-	for t := range c.tiers {
-		if c.tiers[t] != nil {
-			err = c.tiers[t].Close()
+	for t := range c.openTiers {
+		if c.openTiers[t] != nil {
+			err := c.openTiers[t].Close()
 			if err != nil {
 				return err
 			}
-			c.tiers[t] = nil
+			c.openTiers[t] = nil
 		}
 	}
-
-	// Prevent this cake from being used
-	c.inputTier = nil
-	c.tierOffsets = nil
 
 	return nil
 }
 
 func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
-	err := c.inputTier.AppendHash(gpi, hash)
+	err := c.openInputTier.AppendHash(gpi, hash)
 	if err != nil {
 		return err
 	}
-	if c.inputTier.CountPresentationIndices() == 65535 {
+	if c.openInputTier.CountPresentationIndices() == 65535 {
 		path, offset, err := c.FreezeInputTierForBaking()
 		if err != nil {
 			return err
 		}
-		donutPath, err := c.BakeFrozenInputTier(path, offset)
+		donutPath, donutsCount, err := c.BakeFrozenInputTier(path, offset)
 		if err != nil {
 			return err
 		}
-		err = c.IceTheDonut(donutPath)
+		err = c.IceTheDonut(donutPath, 0)
 		if err != nil {
 			return err
+		}
+
+		// We have baked a new donut, possibly into a new tier
+		// We may need to open the new tier
+		if donutsCount == 1 {
+			// New tier 0
+			tier, err := c.openTier(0, offset)
+			if err != nil {
+				return err
+			} else {
+				c.openTiers[0] = tier
+			}
+		} else {
+			// New donut in tier 0
+			if c.openTiers[0] == nil {
+				panic("tier 0 should be non-nil if we've just baked a donut into it")
+			} else {
+				tierPath := c.openTiers[0].folderPath
+				donut, err := c.openDonut(0, tierPath, donutsCount-1)
+				if err != nil {
+					return err
+				}
+				c.openTiers[0].donuts = append(c.openTiers[0].donuts, donut)
+				if len(c.openTiers[0].donuts) > 16 {
+					panic("Too many donuts")
+				}
+			}
+		}
+
+		// We might have to do further bakes
+		tierWeAreBaking := byte(0)
+		for donutsCount == 16 {
+			path, offset, donutOffsets, err := c.FreezeTierForBaking(tierWeAreBaking) // ToDo look into this re openTiers
+			if err != nil {
+				return err
+			}
+
+			var donutPath string
+			donutPath, donutsCount, err = c.BakeFrozenTier(path, offset, donutOffsets, tierWeAreBaking) // ToDo is this folder-only?
+			if err != nil {
+				return err
+			}
+			err = c.IceTheDonut(donutPath, tierWeAreBaking+1)
+			if err != nil {
+				return err
+			}
+			tierWeAreBaking++
 		}
 	}
+
 	return nil
 }
 
 func (c *Cake) LookupHash(hash []byte) (types.GlobalPi, error) {
-	res := c.inputTier.LookupHash(hash)
+	res := c.openInputTier.LookupHash(hash)
 	if res != types.GlobalPresentationIndexNoMatch {
 		return res, nil
 	}
@@ -83,8 +129,11 @@ func (c *Cake) LookupHash(hash []byte) (types.GlobalPi, error) {
 		nibbles[i*2] = shallowtreebyte.NibbleVal(hash[i] >> 4)     // MS
 		nibbles[i*2+1] = shallowtreebyte.NibbleVal(hash[i] & 0x0F) // LS
 	}
-	for t := range c.tiers {
-		res, err := c.tiers[t].LookupHash(nibbles)
+	for t := range c.openTiers {
+		if c.openTiers[t] == nil {
+			continue
+		}
+		res, err := c.openTiers[t].LookupHash(nibbles)
 		if err != nil {
 			return 0, err
 		}
@@ -96,11 +145,11 @@ func (c *Cake) LookupHash(hash []byte) (types.GlobalPi, error) {
 }
 
 func (c *Cake) FreezeInputTierForBaking() (string, types.PiOffset, error) {
-	piCount := c.inputTier.CountPresentationIndices()
-	newPiOffset := c.inputTierOffset + types.PiOffset(piCount)
-	frozenOffset := c.inputTierOffset
+	piCount := c.openInputTier.CountPresentationIndices()
+	newPiOffset := c.tiersInfo.inputOffset + types.PiOffset(piCount)
+	frozenOffset := c.tiersInfo.inputOffset
 
-	numberedFolderName := fmt.Sprintf("InputTier_%d", c.inputTierOffset)
+	numberedFolderName := fmt.Sprintf("InputTier_%d", c.tiersInfo.inputOffset)
 	numberedFolderPath := filepath.Join(c.folderPath, numberedFolderName)
 
 	err := inputtier.CreateInputTierFiles(c.folderPath, newPiOffset)
@@ -108,21 +157,17 @@ func (c *Cake) FreezeInputTierForBaking() (string, types.PiOffset, error) {
 		return "", 0, err
 	}
 
-	c.inputTierOffset = newPiOffset
-	offsets := make([]types.PiOffset, 1, len(c.tierOffsets)+1)
-	offsets[0] = newPiOffset
-	offsets = append(offsets, c.tierOffsets...)
-	filePath := filepath.Join(c.folderPath, "TierOffsets.txt")
-	err = c.writePiOffsetsFile(filePath, offsets)
+	c.tiersInfo.inputOffset = newPiOffset
+	err = c.tiersInfo.ToDisk(c.folderPath)
 	if err != nil {
 		return "", 0, err
 	}
 
-	err = c.inputTier.Close()
+	err = c.openInputTier.Close()
 	if err != nil {
 		return "", 0, err
 	}
-	c.inputTier, err = inputtier.OpenInputTier(c.folderPath, c.inputTierPiWriter, newPiOffset, c.hashBytesLength)
+	c.openInputTier, err = inputtier.OpenInputTier(c.folderPath, c.config[0], newPiOffset, c.hashBytesLength)
 	if err != nil {
 		return "", 0, err
 	}
@@ -141,10 +186,17 @@ func (c *Cake) FreezeInputTierForBaking() (string, types.PiOffset, error) {
 	return numberedFolderPath, frozenOffset, nil
 }
 
-func (c *Cake) FreezeTierForBaking(tierIndex byte) (string, types.PiOffset, error) {
+func (c *Cake) FreezeTierForBaking(tierIndex byte) (string, types.PiOffset,
+	[]types.PiOffset, error) {
+
 	//piCount := c.tiers[tierIndex].CountPresentationIndices()
 	//newPiOffset := c.inputTierOffset + types.PiOffset(piCount)
-	frozenOffset := c.tierOffsets[tierIndex]
+	frozenOffset := c.tiersInfo.offset[tierIndex]
+
+	donutOffsets := c.openTiers[tierIndex].donutOffsets
+	if len(donutOffsets) > 16 {
+		panic("donutOffsets should not have more than 16 elements")
+	}
 
 	numberedFolderName := fmt.Sprintf("Tier%d_%d", tierIndex, frozenOffset)
 	numberedFolderPath := filepath.Join(c.folderPath, numberedFolderName)
@@ -164,11 +216,6 @@ func (c *Cake) FreezeTierForBaking(tierIndex byte) (string, types.PiOffset, erro
 	//	return "", 0, err
 	//}
 
-	err := c.tiers[tierIndex].Close()
-	if err != nil {
-		return "", 0, err
-	}
-	c.tiers[tierIndex] = nil
 	//c.inputTier, err = inputtier.OpenInputTier(c.folderPath, c.inputTierPiWriter, newPiOffset, c.hashBytesLength)
 	//if err != nil {
 	//	return "", 0, err
@@ -178,94 +225,157 @@ func (c *Cake) FreezeTierForBaking(tierIndex byte) (string, types.PiOffset, erro
 	fNameRo := filepath.Join(numberedFolderPath, "READONLY")
 	file, err := os.Create(fNameRo)
 	if err != nil {
-		return "", 0, err
+		return "", 0, nil, err
 	}
 	err = file.Close()
 	if err != nil {
-		return "", 0, err
+		return "", 0, nil, err
 	}
 
-	return numberedFolderPath, frozenOffset, nil
+	c.tiersInfo.present[tierIndex] = false
+	err = c.tiersInfo.ToDisk(c.folderPath)
+	if err != nil {
+		return "", 0, nil, err
+	}
+	err = c.openTiers[tierIndex].Close()
+	if err != nil {
+		return "", 0, nil, err
+	}
+	c.openTiers[tierIndex] = nil
+
+	return numberedFolderPath, frozenOffset, donutOffsets, nil
 }
 
 func (c *Cake) BakeFrozenTier(numberedPath string, offset types.PiOffset,
-	donutOffsets []types.PiOffset, tierIndex byte,
-	sourceLocalPiWriter smalltree.NByteIdConfig[types.LocalPi],
-	destLocalPiWriter smalltree.NByteIdConfig[types.LocalPi]) (string, error) {
+	donutOffsets []types.PiOffset, tierIndex byte) (string, byte, error) {
 
-	donutPath, err := c.newDonutFolder(tierIndex+1, offset)
+	start := time.Now()
+	fmt.Printf("Baking frozen tier %d...", tierIndex)
+
+	donutPath, donutsCount, err := c.newDonutFolder(tierIndex+1, offset)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
+	// Note the following has "no clue" about the tier objects it would be working with.
+	// This is as it should be - the tier is frozen so this function should work
+	// purely from files on disk!
 	err = tierbake.BakeFrozenTierToDonutFolder(numberedPath, donutPath, tierIndex,
-		sourceLocalPiWriter, destLocalPiWriter, c.hashBytesLength, donutOffsets, offset)
+		c.config[tierIndex].LocalPiRWriter, c.config[tierIndex+1].LocalPiRWriter,
+		c.config[tierIndex].PrefixIndexRWriter, c.config[tierIndex+1].PrefixIndexRWriter,
+		c.config[tierIndex].SuffixIndexRWriter, c.config[tierIndex+1].SuffixIndexRWriter,
+		c.hashBytesLength, donutOffsets, offset)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	err = os.RemoveAll(numberedPath)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return donutPath, nil
+
+	fmt.Printf("%.1f minutes\n", time.Since(start).Minutes())
+
+	return donutPath, donutsCount, nil
 }
 
-func (c *Cake) BakeFrozenInputTier(numberedPath string, offset types.PiOffset) (string, error) {
-	donutPath, err := c.newDonutFolder(0, offset)
+func (c *Cake) BakeFrozenInputTier(numberedPath string, offset types.PiOffset) (string, byte, error) {
+	donutPath, donutsCount, err := c.newDonutFolder(0, offset)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
+
+	// This function works only on disk files, no references to tier objects.
 	err = tierbake.BakeFrozenInputTierToDonutFolder(numberedPath, donutPath)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	err = os.RemoveAll(numberedPath)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return donutPath, nil
+	return donutPath, donutsCount, nil
 }
 
-func (c *Cake) IceTheDonut(donutPath string) error {
+func (c *Cake) IceTheDonut(donutPath string, tierIndex byte) error {
+	start := time.Now()
+	if tierIndex > 0 {
+		fmt.Printf("Icing a donut in tier %d...", tierIndex)
+	}
+
 	icingPath := filepath.Join(donutPath, "Icing")
 	fw := forest.NewForestWrite(icingPath)
-	factory := smalltree.NewLevelsCodecNfFactory(c.config)
+	factory := smalltree.NewLevelsCodecNfFactory(c.config[tierIndex])
 	enc := factory.MakeLevelsEncoder()
 	err := fw.StartWrite()
 	if err != nil {
 		return err
 	}
-	// ToDo more than one prefix (for tiers >0)
-	prefixNibbles := shallowtreebyte.NibbleIndex(0)
-	for prefixIndex := forest.PrefixIndexType(0); prefixIndex < 1; prefixIndex++ {
-		suffixFilePath := filepath.Join(donutPath, "HashPrefix", "HashSuffix.bin")
+	prefixNibbles := shallowtreebyte.NibbleIndex(tierIndex)
+	suffixNibbles := shallowtreebyte.NibbleIndex(c.hashBytesLength*2) - prefixNibbles
+	// The hash suffix in the file is a whole number of bytes (possibly one nibble padding)
+	suffixBytes := suffixNibbles / 2
+	if suffixNibbles&1 == 1 {
+		suffixBytes++
+	}
+	prefixIndexCount := 1 << (prefixNibbles * 4) // 16 ^ prefixNibbles
+	filenameDigits, foldersDigits := tierbake.CalculatePrefixPattern(byte(prefixNibbles), 2)
+	for prefixIndex := forest.PrefixIndexType(0); prefixIndex < forest.PrefixIndexType(prefixIndexCount); prefixIndex++ {
+		prefixNibblesSlice := make([]shallowtreebyte.NibbleVal, prefixNibbles)
+		for nibbleIndex := shallowtreebyte.NibbleIndex(0); nibbleIndex < prefixNibbles; nibbleIndex++ {
+			nibblesToShiftRightBy := prefixNibbles - nibbleIndex - 1
+			prefixNibblesSlice[nibbleIndex] = shallowtreebyte.NibbleVal(prefixIndex >> (4 * nibblesToShiftRightBy) & 0x0F)
+		}
+		filename, folder := tierbake.FormatFilePathFilename(prefixNibblesSlice, filenameDigits, foldersDigits)
+		suffixFilePath := filepath.Join(donutPath, "HashPrefix", folder, filename+"HashSuffix.bin")
 		file, err := os.Open(suffixFilePath)
-		defer func() { _ = file.Close() }()
 		if err != nil {
 			return err
 		}
 		contents, err := io.ReadAll(file)
 		if err != nil {
+			_ = file.Close()
 			return err
 		}
-		byteCount := c.inputTierPiWriter.StorageBytes()
-		entrySize := int(c.hashBytesLength) + byteCount
+		err = file.Close()
+		if err != nil {
+			return err
+		}
+		byteCount := c.config[tierIndex].LocalPiRWriter.StorageBytes()
+		entrySize := int(suffixBytes) + byteCount
+		if len(contents)%entrySize != 0 {
+			panic("Wrong size suffix file")
+		}
 		entryCount := len(contents) / entrySize
 		input := make([]shallowtreebyte.HashPi, entryCount)
 		for i := 0; i < entryCount; i++ {
 			start := i * entrySize
+			// Here nibbles is ALL the nibbles in the hash.
+			// Some come from the prefix (from filename), some come from the suffix (from file contents)
 			nibbles := make([]shallowtreebyte.NibbleVal, c.hashBytesLength*2)
-			for b := 0; b < int(c.hashBytesLength); b++ {
-				nibbles[b*2] = shallowtreebyte.NibbleVal(contents[start+b] >> 4)     // MS
-				nibbles[b*2+1] = shallowtreebyte.NibbleVal(contents[start+b] & 0x0F) // LS
+			copy(nibbles[0:prefixNibbles], prefixNibblesSlice)
+			suffixByteIndex := 0
+			suffixNibbleIndex := 0
+			for nibbleIndex := prefixNibbles; nibbleIndex < shallowtreebyte.NibbleIndex(c.hashBytesLength*2); nibbleIndex++ {
+				byteVal := contents[start+suffixByteIndex]
+				if suffixNibbleIndex&1 == 0 {
+					// Most significant nibble of pair
+					nibbles[nibbleIndex] = shallowtreebyte.NibbleVal(byteVal >> 4)
+				} else {
+					nibbles[nibbleIndex] = shallowtreebyte.NibbleVal(byteVal & 0x0F)
+					suffixByteIndex++
+				}
+				suffixNibbleIndex++
 			}
 			input[i] = shallowtreebyte.HashPi{
 				Hash:              nibbles,
-				PresentationIndex: c.inputTierPiWriter.ReadID(contents[start+int(c.hashBytesLength) : start+int(c.hashBytesLength)+byteCount]),
+				PresentationIndex: c.config[tierIndex].LocalPiRWriter.ReadID(contents[start+int(suffixBytes) : start+int(suffixBytes)+byteCount]),
+			}
+			if input[i].PresentationIndex == types.LocalPiNoMatch {
+				panic("No match presentation index")
 			}
 		}
-		st := shallowtreebyte.GenerateShallowTree(input, prefixNibbles, shallowtreebyte.NibbleIndex(c.hashBytesLength*2), shallowtreebyte.ByteIndex(c.config.ReassuranceBytesCount), 0)
-		tf := smalltree.DesignTreeFormat(st, c.config)
+		st := shallowtreebyte.GenerateShallowTree(input, prefixNibbles, shallowtreebyte.NibbleIndex(c.hashBytesLength*2), shallowtreebyte.ByteIndex(c.config[tierIndex].ReassuranceBytesCount), 0)
+		tf := smalltree.DesignTreeFormat(st, c.config[tierIndex])
 		indexBytes, nodesBytes, rootNodeId, rootLevel := enc.EncodeSubTree(st, tf)
 		err = fw.AppendTreeForPrefix(prefixIndex, indexBytes, nodesBytes, rootNodeId, rootLevel)
 		if err != nil {
@@ -276,14 +386,15 @@ func (c *Cake) IceTheDonut(donutPath string) error {
 	if err != nil {
 		return err
 	}
+
+	if tierIndex > 0 {
+		fmt.Printf("%.1f minutes\n", time.Since(start).Minutes())
+	}
+
 	return nil
 }
 
-func (c *Cake) openTier(tierIndex byte, piOffset types.PiOffset,
-	localPiWriter smalltree.NByteIdConfig[types.LocalPi]) (*Tier, error) {
-
-	fmt.Println("Opening tier")
-
+func (c *Cake) openTier(tierIndex byte, piOffset types.PiOffset) (*Tier, error) {
 	tierFolderPath := filepath.Join(c.folderPath, fmt.Sprintf("Tier%d_%d", tierIndex, piOffset))
 	donutOffsetsFilePath := filepath.Join(tierFolderPath, "DonutOffsets.txt")
 	donutOffsets, err := c.readPiOffsetsFile(donutOffsetsFilePath)
@@ -293,22 +404,26 @@ func (c *Cake) openTier(tierIndex byte, piOffset types.PiOffset,
 
 	tier := Tier{}
 	tier.folderPath = tierFolderPath
-	tier.localPiWriter = localPiWriter
+	tier.config = c.config[tierIndex]
+	tier.tierIndex = tierIndex
 
 	for d := range donutOffsets {
-		donut, err := c.openDonut(tierIndex, tierFolderPath, d)
+		donut, err := c.openDonut(tierIndex, tierFolderPath, byte(d))
 		if err != nil {
 			return nil, err
 		}
 		tier.donuts = append(tier.donuts, donut)
-		tier.offsets = append(tier.offsets, donutOffsets[d])
+		tier.donutOffsets = append(tier.donutOffsets, donutOffsets[d])
+		if len(tier.donutOffsets) > 16 {
+			panic("Too many donut offsets")
+		}
 	}
 	return &tier, nil
 }
 
-func (c *Cake) openDonut(tierIndex byte, tierFolderPath string, donutIndex int) (*forest.ForestRead, error) {
+func (c *Cake) openDonut(tierIndex byte, tierFolderPath string, donutIndex byte) (*forest.ForestRead, error) {
 	donutIcingPath := filepath.Join(tierFolderPath, fmt.Sprintf("Donut%X", donutIndex), "Icing")
-	fr := forest.NewForestRead(donutIcingPath, tierIndex, c.config)
+	fr := forest.NewForestRead(donutIcingPath, tierIndex, c.config[tierIndex])
 	err := fr.Open()
 	if err != nil {
 		return nil, err
@@ -316,56 +431,63 @@ func (c *Cake) openDonut(tierIndex byte, tierFolderPath string, donutIndex int) 
 	return fr, nil
 }
 
-func (c *Cake) newDonutFolder(tierIndex byte, piOffset types.PiOffset) (string, error) {
-	if len(c.tierOffsets) < int(tierIndex+1) {
+func (c *Cake) newDonutFolder(tierIndex byte, piOffset types.PiOffset) (string, byte, error) {
+	if c.openTiers[tierIndex] == nil {
+		// Tier doesn't exist (might have earlier been baked into a bigger ter))
 		// New tier folder
 		tierFolder := fmt.Sprintf("Tier%d_%d", tierIndex, piOffset)
 		tierFolderPath := filepath.Join(c.folderPath, tierFolder)
 		err := os.MkdirAll(tierFolderPath, 0755)
 		if err != nil {
-			return "", err
+			return "", 0, err
 		}
-		c.tierOffsets = append(c.tierOffsets, piOffset)
-		filePath := filepath.Join(c.folderPath, "TierOffsets.txt")
-		err = c.writePiOffsetsFile(filePath, c.tierOffsets)
+		// Update the tier offset record
+		c.tiersInfo.offset[tierIndex] = piOffset
+		err = c.tiersInfo.ToDisk(c.folderPath)
 		if err != nil {
-			return "", err
+			return "", 0, err
 		}
-		// New DonutOffsets.txt file
+		// New empty DonutOffsets.txt file
 		donutOffsetsFilePath := filepath.Join(tierFolderPath, "DonutOffsets.txt")
 		donutOffsets := make([]types.PiOffset, 0)
 		err = c.writePiOffsetsFile(donutOffsetsFilePath, donutOffsets)
 		if err != nil {
-			return "", err
+			return "", 0, err
 		}
+		tier, err := c.openTier(tierIndex, piOffset)
+		c.openTiers[tierIndex] = tier
 	}
 	// Read DonutOffsets.txt file
-	tierFolder := fmt.Sprintf("Tier%d_%d", tierIndex, c.tierOffsets[tierIndex])
+	tierFolder := fmt.Sprintf("Tier%d_%d", tierIndex, c.tiersInfo.offset[tierIndex])
 	tierFolderPath := filepath.Join(c.folderPath, tierFolder)
 	donutOffsetsFilepath := filepath.Join(tierFolderPath, "DonutOffsets.txt")
 	donutOffsets, err := c.readPiOffsetsFile(donutOffsetsFilepath)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
-	donutCount := len(donutOffsets)
-	if donutCount >= 16 {
-		return "", fmt.Errorf("tier %d already has 16 donuts", tierIndex)
+	preExistingDonutCount := len(donutOffsets)
+	if preExistingDonutCount >= 16 {
+		return "", 0, fmt.Errorf("tier %d already has 16 donuts", tierIndex)
 	}
 
-	folder := fmt.Sprintf("Donut%X", donutCount)
+	folder := fmt.Sprintf("Donut%X", preExistingDonutCount)
 	path := filepath.Join(tierFolderPath, folder)
 	err = os.MkdirAll(path, 0755)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	donutOffsets = append(donutOffsets, piOffset)
+	if len(donutOffsets) > 16 {
+		panic("Too many donut offsets (limit 16)")
+	}
+	c.openTiers[tierIndex].donutOffsets = donutOffsets
 	err = c.writePiOffsetsFile(donutOffsetsFilepath, donutOffsets)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
-	return path, nil
+	return path, byte(preExistingDonutCount + 1), nil
 }
 
 func (c *Cake) writePiOffsetsFile(filepath string, offsets []types.PiOffset) error {

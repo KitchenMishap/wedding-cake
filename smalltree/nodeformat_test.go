@@ -17,8 +17,8 @@ func TestDesignTreeFormat(t *testing.T) {
 		HashNibbleLength:        64,
 		ReassuranceBytesCount:   2,
 		NodeFormatSpecsPerLevel: 10,
-		NodeIdConfig:            ID16[types.LocalNodeId]{},
-		HashIndexIdConfig:       ID16[types.LocalPi]{},
+		NodeIdRWriter:           ID16[types.LocalNodeId]{},
+		LocalPiRWriter:          ID16[types.LocalPi]{},
 	}
 
 	count := 65535

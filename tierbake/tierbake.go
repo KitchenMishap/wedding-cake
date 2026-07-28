@@ -14,6 +14,10 @@ import (
 func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder string,
 	sourceTierIndex byte,
 	sourceLocalPiWriter smalltree.NByteIdConfig[types.LocalPi], destLocalPiWriter smalltree.NByteIdConfig[types.LocalPi],
+	sourcePrefixIndexRWriter smalltree.NByteIdConfig[types.PrefixIndex],
+	destPrefixIndexRWriter smalltree.NByteIdConfig[types.PrefixIndex],
+	sourceSuffixIndexRWriter smalltree.NByteIdConfig[types.SuffixIndex],
+	destSuffixIndexRWriter smalltree.NByteIdConfig[types.SuffixIndex],
 	hashBytesCount byte, donutOffsets []types.PiOffset,
 	newDonutOffset types.PiOffset) error {
 
@@ -46,7 +50,7 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 	const digitsPerFolder = 2
 	sourceFilenameDigits, sourceFoldersDigits := CalculatePrefixPattern(sourceTierIndex, digitsPerFolder)
 	destFilenameDigits, destFoldersDigits := CalculatePrefixPattern(sourceTierIndex+1, digitsPerFolder)
-	sourcePrefixIndexCount := uint64(1) << (uint64(sourceTierIndex) * 4) // 16 ^ sourceTierIndex
+	sourcePrefixIndexCount := types.PrefixIndex(uint64(1) << (uint64(sourceTierIndex) * 4)) // 16 ^ sourceTierIndex
 	sourcePrefixNibbles := sourceTierIndex
 
 	suffixSizeNibbles := hashBytesCount*2 - sourcePrefixNibbles
@@ -69,13 +73,16 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 		forestUpdatesFilenames[f] = fName
 	}
 
-	for prefixIndex := uint64(0); prefixIndex < sourcePrefixIndexCount; prefixIndex++ {
+	for prefixIndex := types.PrefixIndex(0); prefixIndex < sourcePrefixIndexCount; prefixIndex++ {
 		// Make the prefix from prefixIndex as a sequence of nibbles
 		prefix := make([]shallowtreebyte.NibbleVal, sourcePrefixNibbles)
-		for nibbleIndex := byte(0); nibbleIndex < sourcePrefixNibbles; nibbleIndex++ {
-			prefix[nibbleIndex] = shallowtreebyte.NibbleVal((prefixIndex >> (sourcePrefixNibbles - nibbleIndex - 1) * 4) & 0xF)
+		// Work backwards to construct the prefix nibbles from the prefixIndex
+		prefixIndexShift := prefixIndex
+		for nibbleIndex := int(sourcePrefixNibbles) - 1; nibbleIndex >= 0; nibbleIndex-- {
+			prefix[nibbleIndex] = shallowtreebyte.NibbleVal(prefixIndexShift & 0xF)
+			prefixIndexShift >>= 4
 		}
-		prefixFilename, prefixFolder := formatFilePathFilename(prefix, sourceFilenameDigits, sourceFoldersDigits)
+		prefixFilename, prefixFolder := FormatFilePathFilename(prefix, sourceFilenameDigits, sourceFoldersDigits)
 		suffixFilename := prefixFilename + "HashSuffix.bin"
 
 		// files to append to
@@ -85,7 +92,7 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 		copy(newPrefix[1:], prefix)
 		for newNibble := shallowtreebyte.NibbleVal(0); newNibble < 16; newNibble++ {
 			newPrefix[0] = newNibble
-			newPrefixFilename, newPrefixFolder := formatFilePathFilename(newPrefix, destFilenameDigits, destFoldersDigits)
+			newPrefixFilename, newPrefixFolder := FormatFilePathFilename(newPrefix, destFilenameDigits, destFoldersDigits)
 			newPath := filepath.Join(newDonutFolder, "HashPrefix", newPrefixFolder)
 			err = os.MkdirAll(newPath, 0755)
 			if err != nil {
@@ -108,18 +115,27 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 			}
 			readSuccess := true
 			for readSuccess {
-				_, err = file.Read(suffixEntryBytes)
+				_, err = suffixFile.Read(suffixEntryBytes)
 				if err != nil {
 					readSuccess = false
 				} else {
 					localPi := sourceLocalPiWriter.ReadID(suffixEntryBytes[suffixLocalPiOffset:])
+					if localPi == types.LocalPiNoMatch {
+						panic("No match presentation index")
+					}
 					globalPi := localPi.ToGlobalPi(donutOffsets[forest])
+					if globalPi == types.GlobalPresentationIndexNoMatch {
+						panic("No match presentation index")
+					}
 					newLocalPi := globalPi.ToLocalPi(newDonutOffset)
+					if newLocalPi == types.LocalPiNoMatch {
+						panic("No match presentation index")
+					}
 
 					nextNibble := shallowtreebyte.NibbleVal(suffixEntryBytes[0] >> 4)
-					destPrefix := make([]shallowtreebyte.NibbleVal, 1, suffixSizeNibbles+1)
-					destPrefix[0] = nextNibble
+					destPrefix := make([]shallowtreebyte.NibbleVal, 0, sourcePrefixNibbles+1)
 					destPrefix = append(destPrefix, prefix...)
+					destPrefix = append(destPrefix, nextNibble)
 
 					sourceSuffix := make([]shallowtreebyte.NibbleVal, suffixSizeNibbles)
 					for i := range suffixSizeNibbles {
@@ -131,7 +147,7 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 					}
 					destSuffix := sourceSuffix[1:]
 
-					// Bytes to write to destAppendFiles[nextNibble]
+					// Bytes to write to destAppendFiles[nextNibble] (an <x>HashSuffix.bin file)
 					const spareBytes = 64 + 8
 					suffixAppendBytes := [spareBytes]byte{}
 					lastByte := byte(0)
@@ -147,6 +163,7 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 					writeLength := lastByte + 1 + byte(destLocalPiWriter.StorageBytes())
 					_, err = destAppendFiles[nextNibble].Write(suffixAppendBytes[:writeLength])
 					if err != nil {
+						_ = suffixFile.Close()
 						return err
 					}
 					destAppendCounts[nextNibble]++
@@ -156,19 +173,20 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 					tempBytes := [8 + 1 + 8]byte{}
 					binary.LittleEndian.PutUint64(tempBytes[:8], uint64(localPi))
 					tempBytes[8] = byte(nextNibble)
-					binary.LittleEndian.PutUint64(tempBytes[9:], destAppendCounts[nextNibble])
-					_, err = forestUpdatesFiles[forest].Write(suffixAppendBytes[:17])
+					binary.LittleEndian.PutUint64(tempBytes[9:], destAppendCounts[nextNibble]-1)
+					_, err = forestUpdatesFiles[forest].Write(tempBytes[:17])
 					if err != nil {
+						_ = suffixFile.Close()
 						return err
 					}
-
 				}
 			}
 			err = suffixFile.Close()
 			if err != nil {
 				return err
 			}
-		}
+		} // for forest
+
 		// We've been through all the donuts extracting the info we need pertaining to a particular prefix
 		// To prevent overlapping disk bloat, we now delete all the files pertaining to that prefix from all the source
 		// Donuts
@@ -178,9 +196,17 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 				return err
 			}
 		}
-	}
+	} // for prefixIndex
+
 	// We've been through all the prefixes in all the source donuts.
 	// Now we need to
+
+	destFilename := filepath.Join(newDonutFolder, "HashesOrder.bin")
+	destFile, err := os.Create(destFilename)
+	if err != nil {
+		return err
+	}
+
 	for forest := 0; forest < sourceDonutsCount; forest++ {
 		// For each source donut (forest) we need to deal with the HashesOrder.bin file
 		// We will need to take account of the updates stored in the TempUpdates file for each forest
@@ -188,14 +214,18 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 		// Close and reopen the updates file
 		err = forestUpdatesFiles[forest].Close()
 		if err != nil {
+			_ = destFile.Close()
 			return err
 		}
 		updatesFile, err := os.Open(forestUpdatesFilenames[forest])
 		if err != nil {
+			_ = destFile.Close()
 			return err
 		}
 		updatesStat, err := updatesFile.Stat()
 		if err != nil {
+			_ = destFile.Close()
+			_ = updatesFile.Close()
 			return err
 		}
 		size := updatesStat.Size()
@@ -205,7 +235,7 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 		entries := size / 17
 		// Read it into a map
 		type update struct {
-			newSuffixIndex uint64
+			newSuffixIndex types.SuffixIndex
 			nextNibble     byte
 		}
 		updateMap := make(map[types.LocalPi]update, entries)
@@ -213,20 +243,24 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 			entry := [17]byte{}
 			_, err = updatesFile.Read(entry[:])
 			if err != nil {
+				_ = destFile.Close()
+				_ = updatesFile.Close()
 				return err
 			}
-			oldLocalPi := types.LocalPi(binary.BigEndian.Uint64(entry[:8]))
+			oldLocalPi := types.LocalPi(binary.LittleEndian.Uint64(entry[:8]))
 			nextNibble := entry[8]
-			newSuffixIndex := binary.BigEndian.Uint64(entry[9:])
+			newSuffixIndex := types.SuffixIndex(binary.LittleEndian.Uint64(entry[9:]))
 			updateMap[oldLocalPi] = update{newSuffixIndex, nextNibble}
 		}
 		err = updatesFile.Close()
 		if err != nil {
+			_ = destFile.Close()
 			return err
 		}
 		// And remove the file
 		err = os.Remove(forestUpdatesFilenames[forest])
 		if err != nil {
+			_ = destFile.Close()
 			return err
 		}
 
@@ -234,72 +268,61 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 		sourceFilename := filepath.Join(numberedFolderPath, donutFolder, "HashesOrder.bin")
 		sourceFile, err := os.Open(sourceFilename)
 		if err != nil {
-			return err
-		}
-
-		destFilename := filepath.Join(newDonutFolder, "HashesOrder.bin")
-		destFile, err := os.Create(destFilename)
-		if err != nil {
+			_ = destFile.Close()
 			return err
 		}
 
 		// Each entry in the HashesOrder.bin file is a pair, prefixIndex followed by an index into suffix file.
 		// for each tier, a different number of bytes are used to encode the prefixIndex
-		sourcePrefixIndexBytesCount := bytesToEncodePrefixIndex(sourceTierIndex)
-		sourceSuffixIndexBytesCount := bytesToEncodeSuffixIndex(sourceTierIndex)
+		sourcePrefixIndexBytesCount := sourcePrefixIndexRWriter.StorageBytes()
+		sourceSuffixIndexBytesCount := sourceSuffixIndexRWriter.StorageBytes()
 		sourceEntrySize := sourcePrefixIndexBytesCount + sourceSuffixIndexBytesCount
 
-		destPrefixIndexBytesCount := bytesToEncodePrefixIndex(sourceTierIndex + 1)
-		destSuffixIndexBytesCount := bytesToEncodeSuffixIndex(sourceTierIndex + 1)
+		destPrefixIndexBytesCount := destPrefixIndexRWriter.StorageBytes()
+		destSuffixIndexBytesCount := destSuffixIndexRWriter.StorageBytes()
 		destEntrySize := destPrefixIndexBytesCount + destSuffixIndexBytesCount
 
 		const spareBytes = 8 + 8
 		entry := [spareBytes]byte{}
-		readSuccess := true
 		oldLocalPi := types.LocalPi(0)
+		readSuccess := true
 		for readSuccess {
 			_, err := sourceFile.Read(entry[:sourceEntrySize])
 			if err != nil {
 				readSuccess = false
 			} else {
-				eightBytes := [8]byte{}
-				copy(eightBytes[:], entry[0:sourcePrefixIndexBytesCount])
-				prefixIndex := binary.LittleEndian.Uint64(eightBytes[:])
-				eightBytes = [8]byte{}
-				copy(eightBytes[:], entry[sourcePrefixIndexBytesCount:sourcePrefixIndexBytesCount+sourceSuffixIndexBytesCount])
-				_ = binary.LittleEndian.Uint64(eightBytes[:]) // Old suffixIndex not used
+				prefixIndex := sourcePrefixIndexRWriter.ReadID(entry[:])
+				// old suffixIndex not used
 
-				newPrefixIndex := prefixIndex<<4 | uint64(updateMap[oldLocalPi].nextNibble)
+				nextNibble := updateMap[oldLocalPi].nextNibble
+				newPrefixIndex := prefixIndex<<4 | types.PrefixIndex(nextNibble)
 				newSuffixIndex := updateMap[oldLocalPi].newSuffixIndex
 
 				// Write these to the destination file
-				eightBytes = [8]byte{}
-				binary.LittleEndian.PutUint64(eightBytes[:], newPrefixIndex)
-
 				newEntry := [spareBytes]byte{}
-				copy(newEntry[0:destPrefixIndexBytesCount], eightBytes[:destPrefixIndexBytesCount])
-
-				eightBytes = [8]byte{}
-				binary.LittleEndian.PutUint64(eightBytes[:], newSuffixIndex)
-				copy(newEntry[destPrefixIndexBytesCount:destPrefixIndexBytesCount+destSuffixIndexBytesCount], eightBytes[:destSuffixIndexBytesCount])
+				destPrefixIndexRWriter.WriteID(newEntry[:], newPrefixIndex)
+				destSuffixIndexRWriter.WriteID(newEntry[destPrefixIndexBytesCount:], newSuffixIndex)
 
 				_, err = destFile.Write(newEntry[:destEntrySize])
 				if err != nil {
+					_ = destFile.Close()
+					_ = sourceFile.Close()
 					return err
 				}
 
 				oldLocalPi++
 			}
 		} // for readSuccess
-		err = destFile.Close()
-		if err != nil {
-			return err
-		}
 		err = sourceFile.Close()
 		if err != nil {
+			_ = destFile.Close()
 			return err
 		}
 	} // for forest
+	err = destFile.Close()
+	if err != nil {
+		return err
+	}
 
 	// It is now baked. Remove the flag file
 	err = os.Remove(bakingFlagFileName)
@@ -316,7 +339,8 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 	return nil
 }
 
-func bytesToEncodePrefixIndex(tierIndex byte) byte {
+/*
+func BytesToEncodePrefixIndex(tierIndex byte) byte {
 	// tierIndex = 0: Zero bytes (!)
 	// tierIndex = 1: One byte (one nibble prefix)
 	// tierIndex = 2: One byte (two nibbles prefix)
@@ -325,6 +349,7 @@ func bytesToEncodePrefixIndex(tierIndex byte) byte {
 	return (nibblesPrefix + 1) / 2
 }
 
-func bytesToEncodeSuffixIndex(tierIndex byte) byte {
+func BytesToEncodeSuffixIndex(tierIndex byte) byte {
 	return 3 // Todo: This is approximate! Not guaranteed in all cases
 }
+*/

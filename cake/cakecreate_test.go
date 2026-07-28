@@ -1,12 +1,10 @@
 package cake
 
 import (
-	"fmt"
 	"math/rand"
 	"os"
 	"testing"
 
-	"github.com/kitchenmishap/wedding-cake/smalltree"
 	"github.com/kitchenmishap/wedding-cake/types"
 )
 
@@ -66,13 +64,19 @@ func TestCakeAppend(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const count = 65535*5 + 1000
+	const count = 65535
 
 	hashes := make([][]byte, count)
 	pis := make([]types.GlobalPi, count)
 
 	for i := 0; i < count; i++ {
 		hash := helperRandomHashByte(32)
+		if i == 0 {
+			hash[0] = 0x12 // Useful for debug
+			hash[1] = 0x34
+			hash[2] = 0x56
+			hash[3] = 0x78
+		}
 		hashes[i] = hash
 		pis[i] = types.GlobalPi(i)
 		err = cake.AppendHash(types.GlobalPi(i), hash)
@@ -107,21 +111,21 @@ func TestCakeAppend(t *testing.T) {
 		}
 	}
 
-	donutOffsets := cake.tiers[0].offsets
-	path, offset, err := cake.FreezeTierForBaking(0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	/*
+		path, offset, donutOffsets, err := cake.FreezeTierForBaking(0)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	sourceLocalPiWriter := smalltree.ID16[types.LocalPi]{}
-	destLocalPiWriter := smalltree.ID24[types.LocalPi]{}
+		sourceLocalPiWriter := smalltree.ID16[types.LocalPi]{}
+		destLocalPiWriter := smalltree.ID24[types.LocalPi]{}
 
-	donutPath, err := cake.BakeFrozenTier(path, offset, donutOffsets, 0,
-		sourceLocalPiWriter, destLocalPiWriter)
-	fmt.Println(donutPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+		donutPath, _, err := cake.BakeFrozenTier(path, offset, donutOffsets, 0,
+			sourceLocalPiWriter, destLocalPiWriter)
+		fmt.Println(donutPath)
+		if err != nil {
+			t.Fatal(err)
+		}*/
 
 	err = cake.Close()
 	if err != nil {

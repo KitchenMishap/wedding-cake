@@ -30,7 +30,7 @@ func (lenf *LevelsEncoderNf) EncodeSubTree(tree *shallowtreebyte.ShallowTree, tf
 // allocateLevelBytes() calculates and allocates the number of bytes for indexBytes and for nodeBytes for each level
 // The outer index represents the level, up to the last populated level.
 func (lenf *LevelsEncoderNf) allocateLevelBytes(tf *TreeFormat) ([][]byte, [][]byte) {
-	nodeCountSize := lenf.config.NodeIdConfig.StorageBytes()
+	nodeCountSize := lenf.config.NodeIdRWriter.StorageBytes()
 
 	indexBytesCount := [129]uint64{}
 	nodesBytesCount := [129]uint64{}
@@ -73,9 +73,9 @@ func (lenf *LevelsEncoderNf) allocateLevelBytes(tf *TreeFormat) ([][]byte, [][]b
 
 func (lenf *LevelsEncoderNf) serializeIndexBytes(tf *TreeFormat, indexBytes [][]byte) {
 	levels := len(indexBytes)
-	nodeIdSize := lenf.config.NodeIdConfig.StorageBytes()
+	nodeIdSize := lenf.config.NodeIdRWriter.StorageBytes()
 	nodesCountSize := nodeIdSize
-	hashIndexIdSize := lenf.config.HashIndexIdConfig.StorageBytes()
+	hashIndexIdSize := lenf.config.LocalPiRWriter.StorageBytes()
 	for levelNum := 0; levelNum < levels; levelNum++ {
 		formatSpecGroups := &tf.LevelSpecs[levelNum].Groups
 		levelIndexBytes := &indexBytes[levelNum]
@@ -103,7 +103,7 @@ func (lenf *LevelsEncoderNf) serializeIndexBytes(tf *TreeFormat, indexBytes [][]
 					panic("Not enough bytes")
 				}
 				serializedNodesCountBytes := [spareRoom]byte{} // The count of nodes expressed as "some" bytes
-				lenf.config.NodeIdConfig.WriteID(serializedNodesCountBytes[:nodesCountSize], types.LocalNodeId(group.NodesCount))
+				lenf.config.NodeIdRWriter.WriteID(serializedNodesCountBytes[:nodesCountSize], types.LocalNodeId(group.NodesCount))
 				*levelIndexBytes = append(*levelIndexBytes, serializedNodesCountBytes[:nodesCountSize]...)
 				serializedNodeSpecBytes := [4]byte{} // The details of the FormatSpecs for these nodes
 				switch group.Spec.Format {
@@ -237,10 +237,10 @@ func (lenf *LevelsEncoderNf) serializeLeafNode(leafNode *shallowtreebyte.LeafNod
 		}
 	}
 	pi := leafNode.PresentationIndex
-	hashIndexIdSize := lenf.config.HashIndexIdConfig.StorageBytes()
+	hashIndexIdSize := lenf.config.LocalPiRWriter.StorageBytes()
 	const spareRoom = 8
 	var hashIndexIdBytes [spareRoom]byte
-	lenf.config.HashIndexIdConfig.WriteID(hashIndexIdBytes[:hashIndexIdSize], pi)
+	lenf.config.LocalPiRWriter.WriteID(hashIndexIdBytes[:hashIndexIdSize], pi)
 	*bytes = append(*bytes, hashIndexIdBytes[:hashIndexIdSize]...)
 }
 
@@ -260,7 +260,7 @@ func (lenf *LevelsEncoderNf) serializeFullNode(slotsNode *shallowtreebyte.SlotsN
 	// A full node is one byte padding (0), one byte hash byte index, and 256 N-byte nodeId slots.
 	// (a nodeId of 0 is used to indicate an empty slot)
 	// A full node is therefore fixed size (for a particular nodeIdsize configuration) and can be done in one append
-	nodeIdSize := lenf.config.NodeIdConfig.StorageBytes()
+	nodeIdSize := lenf.config.NodeIdRWriter.StorageBytes()
 	fullNodeSize := 1 + 1 + 256*nodeIdSize
 	const spareRoom = 1 + 1 + 256*8
 	var nodeBytes [spareRoom]byte
@@ -269,13 +269,13 @@ func (lenf *LevelsEncoderNf) serializeFullNode(slotsNode *shallowtreebyte.SlotsN
 	p := 2
 	for s := 0; s < 256; s++ {
 		if slotsNode.Slots[s].IsEmpty() {
-			lenf.config.NodeIdConfig.WriteAllOnes(nodeBytes[p : p+nodeIdSize])
+			lenf.config.NodeIdRWriter.WriteAllOnes(nodeBytes[p : p+nodeIdSize])
 		} else {
 			nodeId, ok := nextLevelIdMap[slotsNode.Slots[s].NextNode]
 			if !ok {
 				panic("Node pointer not found in map")
 			}
-			lenf.config.NodeIdConfig.WriteID(nodeBytes[p:p+nodeIdSize], nodeId)
+			lenf.config.NodeIdRWriter.WriteID(nodeBytes[p:p+nodeIdSize], nodeId)
 		}
 		p += nodeIdSize
 	}
@@ -290,7 +290,7 @@ func (lenf *LevelsEncoderNf) serializeMediumNode(slotsNode *shallowtreebyte.Slot
 
 	// Total length matching our index bytes estimation:
 	// 1 (pad) + 1 (index) + 32 (bitmask flags) + N * SlotsCapacity
-	nodeIdSize := lenf.config.NodeIdConfig.StorageBytes()
+	nodeIdSize := lenf.config.NodeIdRWriter.StorageBytes()
 	totalBytesCount := 1 + 1 + 32 + (nodeIdSize * int(spec.SlotsCapacity))
 	nodeBytes := make([]byte, totalBytesCount)
 
@@ -324,7 +324,7 @@ func (lenf *LevelsEncoderNf) serializeMediumNode(slotsNode *shallowtreebyte.Slot
 			panic("Node pointer not found in map")
 		}
 
-		lenf.config.NodeIdConfig.WriteID(nodeBytes[payloadOffset:payloadOffset+nodeIdSize], nodeId)
+		lenf.config.NodeIdRWriter.WriteID(nodeBytes[payloadOffset:payloadOffset+nodeIdSize], nodeId)
 		payloadOffset += nodeIdSize
 	}
 
@@ -339,7 +339,7 @@ func (lenf *LevelsEncoderNf) serializeTinyNode(slotsNode *shallowtreebyte.SlotsN
 	// FormatTiny consists of one byte hash byte index (no padding this time) followed
 	// by a sequence of {one byte hash byte value, and N-bytes nodeId} with empty slots allowed (nodeId=0).
 	// Crucially, the length of the sequence is NOT NECESSARILY equal to the number of non-empty slots.
-	nodeIdSize := lenf.config.NodeIdConfig.StorageBytes()
+	nodeIdSize := lenf.config.NodeIdRWriter.StorageBytes()
 	nodeBytesCount := 1 + (1+nodeIdSize)*int(spec.SlotsCapacity)
 	const spareRoom = 1 + (1+8)*5
 	if nodeBytesCount > spareRoom {
@@ -358,7 +358,7 @@ func (lenf *LevelsEncoderNf) serializeTinyNode(slotsNode *shallowtreebyte.SlotsN
 			if !ok {
 				panic("Node pointer not found in map")
 			}
-			lenf.config.NodeIdConfig.WriteID(nodeBytes[p+1:p+1+nodeIdSize], nodeId)
+			lenf.config.NodeIdRWriter.WriteID(nodeBytes[p+1:p+1+nodeIdSize], nodeId)
 			p += 1 + nodeIdSize
 		}
 	}

@@ -47,7 +47,7 @@ func (ldn *LevelDecoderNf) GetNode(id types.LocalNodeId) Node {
 		sn.mediumSlots = mediumSlots
 		sn.tinySlots = tinySlots
 		sn.nodeBytes = node.nodeBytes
-		sn.nodeIdConfig = ldn.config.NodeIdConfig
+		sn.nodeIdConfig = ldn.config.NodeIdRWriter
 		resultNode.slotsNode = &sn
 	}
 	return &resultNode
@@ -64,14 +64,14 @@ type tempNode struct {
 func (ldn *LevelDecoderNf) detailsIfLeaf(tn *tempNode) (bool, []byte, types.LocalPi) {
 
 	// A leaf node is identified as two MSB zero bytes followed by an appropriate two LSB bytes bytesCount
-	hashIndexIdSize := ldn.config.HashIndexIdConfig.StorageBytes()
+	hashIndexIdSize := ldn.config.LocalPiRWriter.StorageBytes()
 	reassuranceBytesCount := ldn.config.ReassuranceBytesCount
 	if tn.formatSpecBytes != uint32(reassuranceBytesCount)+uint32(hashIndexIdSize) {
 		return false, nil, 0
 	}
 	// tn.nodeBytes interpreted as FormatLeaf
 	reassuranceBytes := tn.nodeBytes[0:reassuranceBytesCount]
-	hashIndexId := ldn.config.HashIndexIdConfig.ReadID(tn.nodeBytes[reassuranceBytesCount : int(reassuranceBytesCount)+hashIndexIdSize])
+	hashIndexId := ldn.config.LocalPiRWriter.ReadID(tn.nodeBytes[reassuranceBytesCount : int(reassuranceBytesCount)+hashIndexIdSize])
 	return true, reassuranceBytes, hashIndexId
 }
 
@@ -81,7 +81,7 @@ func (ldn *LevelDecoderNf) detailsIfLeaf(tn *tempNode) (bool, []byte, types.Loca
 // or (index, 0, slots) for a FormatTiny
 func (ldn *LevelDecoderNf) hashByteIndexToExamine(tn *tempNode) (byte, byte, byte) {
 	// Is it a FormatFull?
-	nodeIdSize := ldn.config.NodeIdConfig.StorageBytes()
+	nodeIdSize := ldn.config.NodeIdRWriter.StorageBytes()
 	if tn.formatSpecBytes == uint32(1+1+256*nodeIdSize) {
 		if tn.nodeBytes[0] != 0xAA {
 			panic("Expected an 0xAA byte for FormatFull padding")
@@ -119,9 +119,9 @@ func (ldn *LevelDecoderNf) extractNode(nodeId types.LocalNodeId, target *tempNod
 	var nodeByteOffset BytesCountType
 	var nodeByteSize uint16
 
-	nodeCountSize := ldn.config.NodeIdConfig.StorageBytes()
+	nodeCountSize := ldn.config.NodeIdRWriter.StorageBytes()
 	for fs := uint16(0); fs < formatSpecCount; fs++ {
-		formatSpecNodeCount := ldn.config.NodeIdConfig.ReadID(ldn.indexBytes[byteCount : byteCount+BytesCountType(nodeCountSize)])
+		formatSpecNodeCount := ldn.config.NodeIdRWriter.ReadID(ldn.indexBytes[byteCount : byteCount+BytesCountType(nodeCountSize)])
 		byteCount += BytesCountType(nodeCountSize)
 		formatSpecBytes = binary.LittleEndian.Uint32(ldn.indexBytes[byteCount : byteCount+4])
 		byteCount += 4

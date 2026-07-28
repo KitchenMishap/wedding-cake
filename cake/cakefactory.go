@@ -2,7 +2,6 @@ package cake
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -13,19 +12,54 @@ import (
 
 type CakeFactory struct {
 	folderPath      string
-	config          smalltree.SmallTreeConfig
+	config          [5]smalltree.SmallTreeConfig
 	hashBytesLength byte
 }
 
 func NewCakeFactory(folderPath string) *CakeFactory {
 	result := CakeFactory{}
 	result.folderPath = folderPath
-	// ToDo these will probably need per-tier configuration
-	result.config.ReassuranceBytesCount = 2
-	result.config.HashNibbleLength = 64 // For sha256
-	result.config.NodeFormatSpecsPerLevel = 10
-	result.config.NodeIdConfig = smalltree.ID16[types.LocalNodeId]{}
-	result.config.HashIndexIdConfig = smalltree.ID24[types.LocalPi]{}
+
+	result.config[0].ReassuranceBytesCount = 2
+	result.config[0].HashNibbleLength = 64 // For sha256
+	result.config[0].NodeFormatSpecsPerLevel = 10
+	result.config[0].NodeIdRWriter = smalltree.ID16[types.LocalNodeId]{}
+	result.config[0].LocalPiRWriter = smalltree.ID16[types.LocalPi]{}
+	result.config[0].PrefixIndexRWriter = smalltree.ID0[types.PrefixIndex]{}  // A read writer that writes no bytes!
+	result.config[0].SuffixIndexRWriter = smalltree.ID24[types.SuffixIndex]{} // ToDo 24 not guaranteed enough
+
+	result.config[1].ReassuranceBytesCount = 2
+	result.config[1].HashNibbleLength = 64 // For sha256
+	result.config[1].NodeFormatSpecsPerLevel = 10
+	result.config[1].NodeIdRWriter = smalltree.ID16[types.LocalNodeId]{}
+	result.config[1].LocalPiRWriter = smalltree.ID24[types.LocalPi]{}
+	result.config[1].PrefixIndexRWriter = smalltree.ID8[types.PrefixIndex]{}
+	result.config[1].SuffixIndexRWriter = smalltree.ID24[types.SuffixIndex]{}
+
+	result.config[2].ReassuranceBytesCount = 2
+	result.config[2].HashNibbleLength = 64 // For sha256
+	result.config[2].NodeFormatSpecsPerLevel = 10
+	result.config[2].NodeIdRWriter = smalltree.ID16[types.LocalNodeId]{}
+	result.config[2].LocalPiRWriter = smalltree.ID24[types.LocalPi]{}
+	result.config[2].PrefixIndexRWriter = smalltree.ID8[types.PrefixIndex]{}
+	result.config[2].SuffixIndexRWriter = smalltree.ID24[types.SuffixIndex]{}
+
+	result.config[3].ReassuranceBytesCount = 2
+	result.config[3].HashNibbleLength = 64 // For sha256
+	result.config[3].NodeFormatSpecsPerLevel = 10
+	result.config[3].NodeIdRWriter = smalltree.ID16[types.LocalNodeId]{}
+	result.config[3].LocalPiRWriter = smalltree.ID32[types.LocalPi]{}
+	result.config[3].PrefixIndexRWriter = smalltree.ID16[types.PrefixIndex]{}
+	result.config[3].SuffixIndexRWriter = smalltree.ID24[types.SuffixIndex]{}
+
+	result.config[4].ReassuranceBytesCount = 2
+	result.config[4].HashNibbleLength = 64 // For sha256
+	result.config[4].NodeFormatSpecsPerLevel = 10
+	result.config[4].NodeIdRWriter = smalltree.ID16[types.LocalNodeId]{}
+	result.config[4].LocalPiRWriter = smalltree.ID32[types.LocalPi]{}
+	result.config[4].PrefixIndexRWriter = smalltree.ID16[types.PrefixIndex]{}
+	result.config[4].SuffixIndexRWriter = smalltree.ID24[types.SuffixIndex]{}
+
 	result.hashBytesLength = 32
 	return &result
 }
@@ -47,17 +81,9 @@ func (cf *CakeFactory) Create() error {
 		return err
 	}
 
-	// Initialize TierOffsets.txt with a zero for the new lone InputTier
-	filePath := filepath.Join(cf.folderPath, "TierOffsets.txt")
-	file, err := os.Create(filePath)
-	defer func() {
-		_ = file.Close()
-	}()
-	if err != nil {
-		return err
-	}
-	// ascii decimal offset
-	_, err = fmt.Fprintf(file, "%d", piOffset)
+	// Initialize TierOffsets.txt
+	ti := TiersInfo{}
+	err = ti.ToDisk(cf.folderPath)
 	if err != nil {
 		return err
 	}
@@ -71,35 +97,33 @@ func (cf *CakeFactory) Open() (*Cake, error) {
 	}
 	result := Cake{}
 	result.folderPath = cf.folderPath
-	result.config = &cf.config
+	result.config[0] = &cf.config[0]
+	result.config[1] = &cf.config[1]
+	result.config[2] = &cf.config[2]
+	result.config[3] = &cf.config[3]
+	result.config[4] = &cf.config[4]
 	result.hashBytesLength = cf.hashBytesLength
 
 	// Read the tier presentation index offsets from TierOffsets.txt
-	fName := filepath.Join(cf.folderPath, "TierOffsets.txt")
-	offsets, err := result.readPiOffsetsFile(fName)
-	if err != nil {
-		return nil, err
-	}
-	if len(offsets) == 0 {
-		return nil, fmt.Errorf("%s parsing error: expected at least 1 offset", fName)
-	}
-	result.inputTierOffset = offsets[0]
-	result.tierOffsets = offsets[1:]
-
-	// InputTier is CURRENTLY configured with 16 bid LocalPi's
-	result.inputTierPiWriter = smalltree.ID16[types.LocalPi]{}
-
-	result.inputTier, err = inputtier.OpenInputTier(cf.folderPath, result.inputTierPiWriter, result.inputTierOffset, cf.hashBytesLength)
+	err := result.tiersInfo.FromDisk(result.folderPath)
 	if err != nil {
 		return nil, err
 	}
 
-	for t := range result.tierOffsets {
-		tier, err := result.openTier(byte(t), result.tierOffsets[t], result.inputTierPiWriter)
-		if err != nil {
-			return nil, err
+	result.openInputTier, err = inputtier.OpenInputTier(cf.folderPath, &cf.config[0], result.tiersInfo.inputOffset, cf.hashBytesLength)
+	if err != nil {
+		return nil, err
+	}
+
+	for t := range 5 {
+		if result.tiersInfo.present[t] {
+			result.openTiers[t], err = result.openTier(byte(t), result.tiersInfo.offset[t])
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			result.openTiers[t] = nil
 		}
-		result.tiers = append(result.tiers, tier)
 	}
 
 	return &result, nil

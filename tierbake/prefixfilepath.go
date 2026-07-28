@@ -39,7 +39,7 @@ func formatNibble(nibble shallowtreebyte.NibbleVal) string {
 	return fmt.Sprintf("%01X", nibble)
 }
 
-func formatFilePathFilename(prefixNibbles []shallowtreebyte.NibbleVal, filenameDigits byte, folderNameDigits []byte) (string, string) {
+func FormatFilePathFilename(prefixNibbles []shallowtreebyte.NibbleVal, filenameDigits byte, folderNameDigits []byte) (string, string) {
 	length := len(prefixNibbles)
 	if length == 0 {
 		return "", "/"

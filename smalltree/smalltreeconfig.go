@@ -10,6 +10,8 @@ type SmallTreeConfig struct {
 	HashNibbleLength        shallowtreebyte.NibbleIndex
 	ReassuranceBytesCount   byte
 	NodeFormatSpecsPerLevel byte
-	NodeIdConfig            NByteIdConfig[types.LocalNodeId]
-	HashIndexIdConfig       NByteIdConfig[types.LocalPi]
+	NodeIdRWriter           NByteIdConfig[types.LocalNodeId]
+	LocalPiRWriter          NByteIdConfig[types.LocalPi]
+	PrefixIndexRWriter      NByteIdConfig[types.PrefixIndex]
+	SuffixIndexRWriter      NByteIdConfig[types.SuffixIndex]
 }

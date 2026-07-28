@@ -27,8 +27,8 @@ func TestSingleTreeForestWrite(t *testing.T) {
 		HashNibbleLength:        64,
 		ReassuranceBytesCount:   2, // Two will occasionally give "random hash found"
 		NodeFormatSpecsPerLevel: 10,
-		NodeIdConfig:            smalltree.ID16[types.LocalNodeId]{},
-		HashIndexIdConfig:       smalltree.ID16[types.LocalPi]{},
+		NodeIdRWriter:           smalltree.ID16[types.LocalNodeId]{},
+		LocalPiRWriter:          smalltree.ID16[types.LocalPi]{},
 	}
 
 	count := 65535
@@ -107,8 +107,8 @@ func TestMultiTreeForestWrite(t *testing.T) {
 		HashNibbleLength:        64,
 		ReassuranceBytesCount:   2, // Two will occasionally give "random hash found"
 		NodeFormatSpecsPerLevel: 10,
-		NodeIdConfig:            smalltree.ID16[types.LocalNodeId]{},
-		HashIndexIdConfig:       smalltree.ID24[types.LocalPi]{},
+		NodeIdRWriter:           smalltree.ID16[types.LocalNodeId]{},
+		LocalPiRWriter:          smalltree.ID24[types.LocalPi]{},
 	}
 
 	count := 65535 * 16

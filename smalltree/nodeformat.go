@@ -36,8 +36,8 @@ type NodeFormatSpec struct {
 }
 
 func (nfs *NodeFormatSpec) ByteSize(stc *SmallTreeConfig) int {
-	idSize := stc.NodeIdConfig.StorageBytes()
-	hashIdSize := stc.HashIndexIdConfig.StorageBytes()
+	idSize := stc.NodeIdRWriter.StorageBytes()
+	hashIdSize := stc.LocalPiRWriter.StorageBytes()
 
 	switch nfs.Format {
 	case NodeFormatTiny:
