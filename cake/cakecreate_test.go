@@ -64,7 +64,7 @@ func TestCakeAppend(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const count = 65535
+	const count = 65535*257 + 1000
 
 	hashes := make([][]byte, count)
 	pis := make([]types.GlobalPi, count)

@@ -55,6 +55,7 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 		return err
 	}
 	if c.openInputTier.CountPresentationIndices() == 65535 {
+		fmt.Printf("We have reached 65535 hashes in the input tier, time to freeze and bake...\n")
 		path, offset, err := c.FreezeInputTierForBaking()
 		if err != nil {
 			return err
@@ -72,6 +73,13 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 		// We may need to open the new tier
 		if donutsCount == 1 {
 			// New tier 0
+			fmt.Printf("First donut in new tier 0\n")
+			c.tiersInfo.offset[0] = offset
+			c.tiersInfo.present[0] = true
+			err = c.tiersInfo.ToDisk(c.folderPath)
+			if err != nil {
+				return err
+			}
 			tier, err := c.openTier(0, offset)
 			if err != nil {
 				return err
@@ -80,6 +88,7 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 			}
 		} else {
 			// New donut in tier 0
+			fmt.Printf("New donut (there are now %d) in tier 0\n", donutsCount)
 			if c.openTiers[0] == nil {
 				panic("tier 0 should be non-nil if we've just baked a donut into it")
 			} else {
@@ -93,11 +102,12 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 					panic("Too many donuts")
 				}
 			}
-		}
+		} // if donutCounts==1 else
 
 		// We might have to do further bakes
 		tierWeAreBaking := byte(0)
 		for donutsCount == 16 {
+			fmt.Printf("Ooh there are now 16 donuts in tier %d... time to freeze and bake!\n", tierWeAreBaking)
 			path, offset, donutOffsets, err := c.FreezeTierForBaking(tierWeAreBaking) // ToDo look into this re openTiers
 			if err != nil {
 				return err
@@ -112,8 +122,44 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 			if err != nil {
 				return err
 			}
+
+			// ONCE AGAIN...
+			// We have baked a new donut, possibly into a new tier
+			// We may need to open the new tier
+			if donutsCount == 1 {
+				// New tier
+				fmt.Printf("First donut in new tier... but which tier ?!\n")
+				c.tiersInfo.offset[tierWeAreBaking+1] = offset
+				c.tiersInfo.present[tierWeAreBaking+1] = true
+				err = c.tiersInfo.ToDisk(c.folderPath)
+				if err != nil {
+					return err
+				}
+				tier, err := c.openTier(tierWeAreBaking+1, offset)
+				if err != nil {
+					return err
+				} else {
+					c.openTiers[tierWeAreBaking+1] = tier
+				}
+			} else {
+				// New donut in tier
+				fmt.Printf("New donut (there are now %d) in tier... which tier?\n", donutsCount)
+				if c.openTiers[tierWeAreBaking+1] == nil {
+					panic("tier should be non-nil if we've just baked a donut into it")
+				} else {
+					tierPath := c.openTiers[tierWeAreBaking+1].folderPath
+					donut, err := c.openDonut(tierWeAreBaking+1, tierPath, donutsCount-1)
+					if err != nil {
+						return err
+					}
+					c.openTiers[tierWeAreBaking+1].donuts = append(c.openTiers[tierWeAreBaking+1].donuts, donut)
+					if len(c.openTiers[tierWeAreBaking+1].donuts) > 16 {
+						panic("Too many donuts")
+					}
+				}
+			} // if donutsCount==1 else
 			tierWeAreBaking++
-		}
+		} // for donutCounts==16
 	}
 
 	return nil
@@ -443,6 +489,7 @@ func (c *Cake) newDonutFolder(tierIndex byte, piOffset types.PiOffset) (string, 
 		}
 		// Update the tier offset record
 		c.tiersInfo.offset[tierIndex] = piOffset
+		c.tiersInfo.present[tierIndex] = true
 		err = c.tiersInfo.ToDisk(c.folderPath)
 		if err != nil {
 			return "", 0, err
