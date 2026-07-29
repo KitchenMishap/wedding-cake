@@ -145,8 +145,9 @@ func (fr *ForestRead) Lookup(hash []shallowtreebyte.NibbleVal) types.LocalPi {
 	prefixNibblesCount := shallowtreebyte.NibbleIndex(fr.tierIndex)
 	prefixIndex := PrefixIndexType(0)
 	for nibbleIndex := shallowtreebyte.NibbleIndex(0); nibbleIndex < prefixNibblesCount; nibbleIndex++ {
+		prefixIndex <<= 4
 		nibbleVal := hash[nibbleIndex]
-		prefixIndex |= PrefixIndexType(nibbleVal) << (4 * PrefixIndexType(nibbleIndex))
+		prefixIndex |= PrefixIndexType(nibbleVal)
 	}
 	level := fr.rootLevelForPrefix[prefixIndex]
 	nodeId := fr.rootNodeIdForPrefix[prefixIndex]

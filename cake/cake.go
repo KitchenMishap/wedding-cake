@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/kitchenmishap/wedding-cake/forest"
@@ -296,7 +297,7 @@ func (c *Cake) BakeFrozenTier(numberedPath string, offset types.PiOffset,
 	donutOffsets []types.PiOffset, tierIndex byte) (string, byte, error) {
 
 	start := time.Now()
-	fmt.Printf("Baking frozen tier %d...", tierIndex)
+	fmt.Printf("Baking frozen tier %d...\n", tierIndex)
 
 	donutPath, donutsCount, err := c.newDonutFolder(tierIndex+1, offset)
 	if err != nil {
@@ -307,9 +308,7 @@ func (c *Cake) BakeFrozenTier(numberedPath string, offset types.PiOffset,
 	// This is as it should be - the tier is frozen so this function should work
 	// purely from files on disk!
 	err = tierbake.BakeFrozenTierToDonutFolder(numberedPath, donutPath, tierIndex,
-		c.config[tierIndex].LocalPiRWriter, c.config[tierIndex+1].LocalPiRWriter,
-		c.config[tierIndex].PrefixIndexRWriter, c.config[tierIndex+1].PrefixIndexRWriter,
-		c.config[tierIndex].SuffixIndexRWriter, c.config[tierIndex+1].SuffixIndexRWriter,
+		c.config[tierIndex], c.config[tierIndex+1],
 		c.hashBytesLength, donutOffsets, offset)
 	if err != nil {
 		return "", 0, err
@@ -319,13 +318,19 @@ func (c *Cake) BakeFrozenTier(numberedPath string, offset types.PiOffset,
 		return "", 0, err
 	}
 
-	fmt.Printf("%.1f minutes\n", time.Since(start).Minutes())
+	fmt.Printf("\t...%.1f minutes\n", time.Since(start).Minutes())
 
 	return donutPath, donutsCount, nil
 }
 
 func (c *Cake) BakeFrozenInputTier(numberedPath string, offset types.PiOffset) (string, byte, error) {
 	donutPath, donutsCount, err := c.newDonutFolder(0, offset)
+	if err != nil {
+		return "", 0, err
+	}
+
+	// Initial check by forward lookup pf localPi 0
+	hash, err := tierbake.ForwardLookup(0, 0, numberedPath, c.config[0])
 	if err != nil {
 		return "", 0, err
 	}
@@ -339,13 +344,25 @@ func (c *Cake) BakeFrozenInputTier(numberedPath string, offset types.PiOffset) (
 	if err != nil {
 		return "", 0, err
 	}
+
+	// Check for same hash in baked donut
+	hash2, err := tierbake.ForwardLookup(0, 0, donutPath, c.config[0])
+	if err != nil {
+		return "", 0, err
+	}
+	if slices.Equal(hash, hash2) {
+		fmt.Printf("Hash match after bake to tier 0 :-)\n")
+	} else {
+		panic("hash mismatch after bake to tier 0")
+	}
+
 	return donutPath, donutsCount, nil
 }
 
 func (c *Cake) IceTheDonut(donutPath string, tierIndex byte) error {
 	start := time.Now()
 	if tierIndex > 0 {
-		fmt.Printf("Icing a donut in tier %d...", tierIndex)
+		fmt.Printf("Icing a donut in tier %d...\n", tierIndex)
 	}
 
 	icingPath := filepath.Join(donutPath, "Icing")
@@ -434,7 +451,7 @@ func (c *Cake) IceTheDonut(donutPath string, tierIndex byte) error {
 	}
 
 	if tierIndex > 0 {
-		fmt.Printf("%.1f minutes\n", time.Since(start).Minutes())
+		fmt.Printf("\t...%.1f minutes\n", time.Since(start).Minutes())
 	}
 
 	return nil

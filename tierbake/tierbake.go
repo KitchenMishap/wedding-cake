@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
 	"github.com/kitchenmishap/wedding-cake/smalltree"
@@ -13,19 +14,29 @@ import (
 
 func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder string,
 	sourceTierIndex byte,
-	sourceLocalPiWriter smalltree.NByteIdConfig[types.LocalPi], destLocalPiWriter smalltree.NByteIdConfig[types.LocalPi],
-	sourcePrefixIndexRWriter smalltree.NByteIdConfig[types.PrefixIndex],
-	destPrefixIndexRWriter smalltree.NByteIdConfig[types.PrefixIndex],
-	sourceSuffixIndexRWriter smalltree.NByteIdConfig[types.SuffixIndex],
-	destSuffixIndexRWriter smalltree.NByteIdConfig[types.SuffixIndex],
+	sourceConfig *smalltree.SmallTreeConfig, destConfig *smalltree.SmallTreeConfig,
 	hashBytesCount byte, donutOffsets []types.PiOffset,
 	newDonutOffset types.PiOffset) error {
+
+	// Do a forward lookup of localPi 0 in Donut 0 as an initial check
+	donut0FolderPath := filepath.Join(numberedFolderPath, "Donut0")
+	hash, err := ForwardLookup(0, shallowtreebyte.NibbleIndex(sourceTierIndex), donut0FolderPath, sourceConfig)
+	if err != nil {
+		return err
+	}
+
+	sourceLocalPiWriter := sourceConfig.LocalPiRWriter
+	sourcePrefixIndexRWriter := sourceConfig.PrefixIndexRWriter
+	sourceSuffixIndexRWriter := sourceConfig.SuffixIndexRWriter
+	destLocalPiWriter := destConfig.LocalPiRWriter
+	destPrefixIndexRWriter := destConfig.PrefixIndexRWriter
+	destSuffixIndexRWriter := destConfig.SuffixIndexRWriter
 
 	sourceDonutsCount := len(donutOffsets)
 
 	// Check for READONLY file
 	fNameRo := filepath.Join(numberedFolderPath, "READONLY")
-	_, err := os.Stat(fNameRo)
+	_, err = os.Stat(fNameRo)
 	if err != nil {
 		panic("Input tier folder should have READONLY flag file")
 	}
@@ -88,17 +99,18 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 		// files to append to
 		destAppendFiles := [16]*os.File{}
 		destAppendCounts := [16]uint64{}
-		newPrefix := make([]shallowtreebyte.NibbleVal, sourcePrefixNibbles+1)
-		copy(newPrefix[1:], prefix)
+		newPrefix := make([]shallowtreebyte.NibbleVal, 0, sourcePrefixNibbles+1)
+		newPrefix = append(newPrefix, prefix...)
+		newPrefix = append(newPrefix, shallowtreebyte.NibbleVal(0)) // This element will be overwritten with newNibble
 		for newNibble := shallowtreebyte.NibbleVal(0); newNibble < 16; newNibble++ {
-			newPrefix[0] = newNibble
+			newPrefix[sourcePrefixNibbles] = newNibble
 			newPrefixFilename, newPrefixFolder := FormatFilePathFilename(newPrefix, destFilenameDigits, destFoldersDigits)
 			newPath := filepath.Join(newDonutFolder, "HashPrefix", newPrefixFolder)
 			err = os.MkdirAll(newPath, 0755)
 			if err != nil {
 				return err
 			}
-			destAppendFiles[newNibble], err = os.OpenFile(filepath.Join(newPath, newPrefixFilename+"HashSuffix.bin"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0755)
+			destAppendFiles[newNibble], err = os.Create(filepath.Join(newPath, newPrefixFilename+"HashSuffix.bin"))
 			if err != nil {
 				return err
 			}
@@ -336,20 +348,17 @@ func BakeFrozenTierToDonutFolder(numberedFolderPath string, newDonutFolder strin
 		return err
 	}
 
+	// Do a forward lookup of localPi 0 in the new donut as an final check
+	newHash, err := ForwardLookup(0, shallowtreebyte.NibbleIndex(sourceTierIndex+1), newDonutFolder, destConfig)
+	if err != nil {
+		return err
+	}
+	if slices.Equal(newHash, hash) {
+		fmt.Printf("Baking hashes check match! :-)\n")
+	} else {
+		fmt.Printf("Mismatch after baking tier %d\n", sourceTierIndex+1)
+		panic("Baking hashes check mismatch!")
+	}
+
 	return nil
 }
-
-/*
-func BytesToEncodePrefixIndex(tierIndex byte) byte {
-	// tierIndex = 0: Zero bytes (!)
-	// tierIndex = 1: One byte (one nibble prefix)
-	// tierIndex = 2: One byte (two nibbles prefix)
-	// tierIndex = 3: Two bytes (three nibbles prefix)
-	nibblesPrefix := tierIndex
-	return (nibblesPrefix + 1) / 2
-}
-
-func BytesToEncodeSuffixIndex(tierIndex byte) byte {
-	return 3 // Todo: This is approximate! Not guaranteed in all cases
-}
-*/
