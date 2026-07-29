@@ -1,6 +1,7 @@
 package cake
 
 import (
+	"fmt"
 	"math/rand"
 	"os"
 	"testing"
@@ -126,6 +127,58 @@ func TestCakeAppend(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}*/
+
+	err = cake.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCakeNoCheck(t *testing.T) {
+	testDir := "Temp_Testing"
+	_ = os.RemoveAll(testDir) // Ignore error if it doesn't exist yet
+	err := os.MkdirAll(testDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cf := NewCakeFactory(testDir)
+
+	err = cf.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cake, err := cf.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const count = 65535*257 + 1000
+
+	for i := 0; i < count; i++ {
+		if i%65535 == 0 {
+			fmt.Printf("%d\n", i/65535)
+		}
+		hash := helperRandomHashByte(32)
+		pi, err := cake.LookupHash(hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pi != types.GlobalPresentationIndexNoMatch {
+			t.Fatal("Hash should not be found yet")
+		}
+		err = cake.AppendHash(types.GlobalPi(i), hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pi, err = cake.LookupHash(hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pi == types.GlobalPresentationIndexNoMatch {
+			t.Fatal("Hash should be found now")
+		}
+	}
 
 	err = cake.Close()
 	if err != nil {
