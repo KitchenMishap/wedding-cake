@@ -73,17 +73,18 @@ func (ph *PrefixHolder) Write(writer io.Writer, spareNibble byte) error {
 
 // AppendSuffix Append the specified SuffixHolder to this PrefixHolder, using
 // the supplied *HashWindow to construct the resultant HashHolder
-func (ph *PrefixHolder) AppendSuffix(target *HashWindow, suffix *SuffixHolder) HashHolder {
+func (ph *PrefixHolder) AppendSuffix(result *HashHolder, suffix *SuffixHolder) {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}
 	if suffix.splitNibbleIndex != ph.splitNibbleIndex || suffix.hashBytesCount != ph.hashBytesCount {
 		panic("Prefix and suffix are not a matching pair")
 	}
+	result.Init(ph.hashBytesCount)
 	if ph.splitNibbleIndex&1 == 0 {
 		// Aah... Easy mode. Prefix and suffix are isolated byte slices. (Even number of nibbles each)
-		copy(target.bytes[:ph.prefixBytesCount], ph.bytes[:ph.prefixBytesCount]) // Prefix bytes
-		copy(target.bytes[suffix.suffixBytesStart:suffix.hashBytesCount],        // Suffix bytes
+		copy(result.bytes[:ph.prefixBytesCount], ph.bytes[:ph.prefixBytesCount]) // Prefix bytes
+		copy(result.bytes[suffix.suffixBytesStart:suffix.hashBytesCount],        // Suffix bytes
 			suffix.bytes[suffix.suffixBytesStart:suffix.hashBytesCount])
 	} else {
 		// ooh... call the boss for this one
@@ -92,19 +93,15 @@ func (ph *PrefixHolder) AppendSuffix(target *HashWindow, suffix *SuffixHolder) H
 		skippedFromPrefixEnd := ph.bytes[ph.prefixBytesCount-1]
 		skippedFromSuffixStart := suffix.bytes[ph.prefixBytesCount-1]                      // (yes they have the same index)
 		skip := byte(1)                                                                    // Number of bytes we're skipping for the moment
-		copy(target.bytes[:ph.prefixBytesCount-skip], ph.bytes[:ph.prefixBytesCount-skip]) // Easy prefix bytes
-		copy(target.bytes[suffix.suffixBytesStart+skip:suffix.hashBytesCount],             // Easy suffix bytes
+		copy(result.bytes[:ph.prefixBytesCount-skip], ph.bytes[:ph.prefixBytesCount-skip]) // Easy prefix bytes
+		copy(result.bytes[suffix.suffixBytesStart+skip:suffix.hashBytesCount],             // Easy suffix bytes
 			suffix.bytes[suffix.suffixBytesStart+skip:suffix.hashBytesCount])
 		// The final overlapping byte to merge in the middle isn't all that tricky
 		mostSignificant := skippedFromPrefixEnd & 0xF0
 		leastSignificant := skippedFromSuffixStart & 0x0F
 		merged := mostSignificant | leastSignificant
-		target.bytes[ph.prefixBytesCount-1] = merged
+		result.bytes[ph.prefixBytesCount-1] = merged
 	}
-	// Final odds and sods
-	target.hashByteCount = ph.hashBytesCount
-	hashHolder := HashHolder{hw: target}
-	return hashHolder
 }
 
 func (ph *PrefixHolder) AppendNibble(nibble byte) {

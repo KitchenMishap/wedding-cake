@@ -20,8 +20,8 @@ func TestPrefixSuffixDisk(tes *testing.T) {
 		for _, prefixNibbleLength := range prefixNibbleLengths {
 
 			hashArray := helperRandomHash()
-			hw1 := HashWindow{}
-			hash := hw1.AsHashHolder(hashByteLength)
+			hash := HashHolder{}
+			hash.Init(hashByteLength)
 			hash.SetFromArray(hashArray)
 
 			hashFile, err := os.Create("Temp_Testing/Hash")
@@ -93,13 +93,13 @@ func TestPrefixSuffixDisk(tes *testing.T) {
 			if exists && spare != spareNibble {
 				tes.Fatal("Spare nibble mismatch")
 			}
-			hw6 := HashWindow{}
-			hash2 := prefix2.AppendSuffix(&hw6, &suffix2)
+			hash2 := HashHolder{}
+			prefix2.AppendSuffix(&hash2, &suffix2)
 
-			if !hash.Equal(hash2) {
+			if !hash.Equal(&hash2) {
 				tes.Errorf("Hash does not match: %d bytes hash, %d nibble prefix (%d byte prefix)", hashByteLength, prefixNibbleLength, prefixNibbleLength/2)
-				fmt.Println(hash.hw.bytes)
-				fmt.Println(hash2.hw.bytes)
+				fmt.Println(hash.bytes)
+				fmt.Println(hash2.bytes)
 			} else {
 				fmt.Printf("Success: %d bytes hash, %d nibble prefix (%d byte prefix)\n", hashByteLength, prefixNibbleLength, prefixNibbleLength/2)
 			}
@@ -120,8 +120,8 @@ func TestAppendPrefixSuffix(tes *testing.T) {
 		for _, prefixNibbleLength := range prefixNibbleLengths {
 
 			hashArray := helperRandomHash()
-			hw1 := HashWindow{}
-			hash := hw1.AsHashHolder(hashByteLength)
+			hash := HashHolder{}
+			hash.Init(hashByteLength)
 			hash.SetFromArray(hashArray)
 
 			// Split into prefix and suffix
@@ -129,13 +129,13 @@ func TestAppendPrefixSuffix(tes *testing.T) {
 			suffix := SuffixHolder{}
 			hash.ExtractPrefixSuffix(&prefix, &suffix, prefixNibbleLength)
 
-			hw6 := HashWindow{}
-			hash2 := prefix.AppendSuffix(&hw6, &suffix)
+			hash2 := HashHolder{}
+			prefix.AppendSuffix(&hash2, &suffix)
 
-			if !hash.Equal(hash2) {
+			if !hash.Equal(&hash2) {
 				tes.Errorf("Hash does not match: %d bytes hash, %d nibble prefix (%d byte prefix)", hashByteLength, prefixNibbleLength, prefixNibbleLength/2)
-				fmt.Println(hash.hw.bytes)
-				fmt.Println(hash2.hw.bytes)
+				fmt.Println(hash.bytes)
+				fmt.Println(hash2.bytes)
 			} else {
 				fmt.Printf("Success: %d bytes hash, %d nibble prefix (%d byte prefix)\n", hashByteLength, prefixNibbleLength, prefixNibbleLength/2)
 			}
@@ -156,8 +156,8 @@ func TestPrefixAsNumber(tes *testing.T) {
 		for _, prefixNibbleLength := range prefixNibbleLengths {
 
 			hashArray := helperRandomHash()
-			hw1 := HashWindow{}
-			hash := hw1.AsHashHolder(hashByteLength)
+			hash := HashHolder{}
+			hash.Init(hashByteLength)
 			hash.SetFromArray(hashArray)
 
 			// Split into prefix and suffix
@@ -170,13 +170,13 @@ func TestPrefixAsNumber(tes *testing.T) {
 			prefix2 := PrefixHolder{}
 			prefix2.Init(hashByteLength, prefixNibbleLength)
 			prefix2.SetPrefixFromNumber(number)
-			hw6 := HashWindow{}
-			hash2 := prefix2.AppendSuffix(&hw6, &suffix)
+			hash2 := HashHolder{}
+			prefix2.AppendSuffix(&hash2, &suffix)
 
-			if !hash.Equal(hash2) {
+			if !hash.Equal(&hash2) {
 				tes.Errorf("Hash does not match: %d bytes hash, %d nibble prefix (%d byte prefix)", hashByteLength, prefixNibbleLength, prefixNibbleLength/2)
-				fmt.Println(hash.hw.bytes)
-				fmt.Println(hash2.hw.bytes)
+				fmt.Println(hash.bytes)
+				fmt.Println(hash2.bytes)
 			} else {
 				fmt.Printf("Success: %d bytes hash, %d nibble prefix (%d byte prefix)\n", hashByteLength, prefixNibbleLength, prefixNibbleLength/2)
 			}

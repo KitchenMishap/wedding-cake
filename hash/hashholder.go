@@ -6,45 +6,61 @@ import (
 )
 
 type HashHolder struct {
-	hw *HashWindow
+	bytes          [MaxHashBytes]byte
+	hashBytesCount byte
 }
 
-func newHashHolder(hw *HashWindow) HashHolder {
-	return HashHolder{hw: hw}
+func (hh *HashHolder) Init(hashByteLength byte) {
+	hh.hashBytesCount = hashByteLength
 }
 
-func (hh HashHolder) Read(reader io.Reader) error {
-	_, err := io.ReadFull(reader, hh.hw.bytes[:hh.hw.hashByteCount])
+func (hh *HashHolder) IsValid() bool {
+	return hh.hashBytesCount > 0 && hh.hashBytesCount <= MaxHashBytes
+}
+
+func (hh *HashHolder) Read(reader io.Reader) error {
+	if !hh.IsValid() {
+		panic("HashHolder not valid")
+	}
+	_, err := io.ReadFull(reader, hh.bytes[:hh.hashBytesCount])
 	return err
 }
-func (hh HashHolder) Write(writer io.Writer) error {
-	_, err := writer.Write(hh.hw.bytes[:hh.hw.hashByteCount])
+func (hh *HashHolder) Write(writer io.Writer) error {
+	if !hh.IsValid() {
+		panic("HashHolder not valid")
+	}
+	_, err := writer.Write(hh.bytes[:hh.hashBytesCount])
 	return err
 }
-func (hh HashHolder) SetFromArray(array *[MaxHashBytes]byte) {
-	hh.hw.bytes = *array
+func (hh *HashHolder) SetFromArray(array *[MaxHashBytes]byte) {
+	if !hh.IsValid() {
+		panic("HashHolder not valid")
+	}
+	hh.bytes = *array
 }
-func (hh HashHolder) GetToArray(array *[MaxHashBytes]byte) {
-	*array = hh.hw.bytes
+func (hh *HashHolder) GetToArray(array *[MaxHashBytes]byte) {
+	if !hh.IsValid() {
+		panic("HashHolder not valid")
+	}
+	*array = hh.bytes
 }
-func (hh HashHolder) Equal(other HashHolder) bool {
-	if hh.hw.hashByteCount != other.hw.hashByteCount {
+func (hh *HashHolder) Equal(other *HashHolder) bool {
+	if hh.hashBytesCount != other.hashBytesCount {
 		panic("Cannot compare hashes of different sizes")
 	}
-	return bytes.Equal(hh.hw.bytes[:hh.hw.hashByteCount], other.hw.bytes[:other.hw.hashByteCount])
+	return bytes.Equal(hh.bytes[:hh.hashBytesCount], other.bytes[:other.hashBytesCount])
 }
-func (hh HashHolder) ExtractPrefixSuffix(resultPrefix *PrefixHolder, resultSuffix *SuffixHolder, splitNibbleIndex byte) {
-
+func (hh *HashHolder) ExtractPrefixSuffix(resultPrefix *PrefixHolder, resultSuffix *SuffixHolder, splitNibbleIndex byte) {
 	// Prefix
-	resultPrefix.Init(hh.hw.hashByteCount, splitNibbleIndex)
-	copy(resultPrefix.bytes[:resultPrefix.prefixBytesCount], hh.hw.bytes[:resultPrefix.prefixBytesCount])
+	resultPrefix.Init(hh.hashBytesCount, splitNibbleIndex)
+	copy(resultPrefix.bytes[:resultPrefix.prefixBytesCount], hh.bytes[:resultPrefix.prefixBytesCount])
 
 	// Suffix
-	resultSuffix.Init(hh.hw.hashByteCount, splitNibbleIndex)
-	copy(resultSuffix.bytes[resultSuffix.suffixBytesStart:hh.hw.hashByteCount],
-		hh.hw.bytes[resultSuffix.suffixBytesStart:hh.hw.hashByteCount])
+	resultSuffix.Init(hh.hashBytesCount, splitNibbleIndex)
+	copy(resultSuffix.bytes[resultSuffix.suffixBytesStart:hh.hashBytesCount],
+		hh.bytes[resultSuffix.suffixBytesStart:hh.hashBytesCount])
 }
 func (hh HashHolder) HashIsZeroes() bool {
 	zeroes := [MaxHashBytes]byte{}
-	return bytes.Equal(hh.hw.bytes[:hh.hw.hashByteCount], zeroes[:hh.hw.hashByteCount])
+	return bytes.Equal(hh.bytes[:hh.hashBytesCount], zeroes[:hh.hashBytesCount])
 }

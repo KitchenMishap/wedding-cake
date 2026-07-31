@@ -7,8 +7,3 @@ type HashWindow struct {
 	bytes         [MaxHashBytes]byte
 	hashByteCount byte // Always ignore bytes[hashByteCount:MaxHashBytes]
 }
-
-func (hw *HashWindow) AsHashHolder(hashByteCount byte) HashHolder {
-	hw.hashByteCount = hashByteCount
-	return newHashHolder(hw)
-}
