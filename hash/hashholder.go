@@ -33,13 +33,12 @@ func (hh HashHolder) Equal(other HashHolder) bool {
 	}
 	return bytes.Equal(hh.hw.bytes[:hh.hw.hashByteCount], other.hw.bytes[:other.hw.hashByteCount])
 }
-func (hh HashHolder) ExtractPrefixSuffix(target1 *HashWindow, target2 *HashWindow,
+func (hh HashHolder) ExtractPrefixSuffix(target2 *HashWindow,
 	splitNibbleIndex byte) (PrefixHolder, SuffixHolder) {
 
 	// Prefix
-	target1.hashByteCount = hh.hw.hashByteCount
-	prefix := newPrefixHolder(target1, splitNibbleIndex)                                 // Slight whiff, #EGGY haven't fully set up target1 !
-	copy(target1.bytes[:prefix.prefixBytesCount], hh.hw.bytes[:prefix.prefixBytesCount]) // Chicken & egg
+	prefix := newPrefixHolder(hh.hw.hashByteCount, splitNibbleIndex)
+	copy(prefix.bytes[:prefix.prefixBytesCount], hh.hw.bytes[:prefix.prefixBytesCount])
 
 	// Suffix
 	target2.hashByteCount = hh.hw.hashByteCount

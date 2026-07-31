@@ -43,9 +43,8 @@ func TestPrefixSuffixDisk(tes *testing.T) {
 			}
 
 			// Split into prefix and suffix
-			hw2 := HashWindow{}
 			hw3 := HashWindow{}
-			prefix, suffix := hash.ExtractPrefixSuffix(&hw2, &hw3, prefixNibbleLength)
+			prefix, suffix := hash.ExtractPrefixSuffix(&hw3, prefixNibbleLength)
 
 			// Write and read back
 			spareNibble := byte(0xA)
@@ -73,9 +72,8 @@ func TestPrefixSuffixDisk(tes *testing.T) {
 			if err != nil {
 				tes.Errorf("Failed to re-open suffix file: %v", err)
 			}
-			hw4 := HashWindow{}
 			hw5 := HashWindow{}
-			prefix2 := hw4.AsPrefixHolder(hashByteLength, prefixNibbleLength)
+			prefix2 := newPrefixHolder(hashByteLength, prefixNibbleLength)
 			suffix2 := hw5.AsSuffixHolder(hashByteLength, prefixNibbleLength)
 			err = prefix2.Read(prefixFile2)
 			if err != nil {
@@ -125,9 +123,8 @@ func TestAppendPrefixSuffix(tes *testing.T) {
 			hash.SetFromArray(hashArray)
 
 			// Split into prefix and suffix
-			hw2 := HashWindow{}
 			hw3 := HashWindow{}
-			prefix, suffix := hash.ExtractPrefixSuffix(&hw2, &hw3, prefixNibbleLength)
+			prefix, suffix := hash.ExtractPrefixSuffix(&hw3, prefixNibbleLength)
 
 			hw6 := HashWindow{}
 			hash2 := prefix.AppendSuffix(&hw6, suffix)
@@ -161,14 +158,12 @@ func TestPrefixAsNumber(tes *testing.T) {
 			hash.SetFromArray(hashArray)
 
 			// Split into prefix and suffix
-			hw2 := HashWindow{}
 			hw3 := HashWindow{}
-			prefix, suffix := hash.ExtractPrefixSuffix(&hw2, &hw3, prefixNibbleLength)
+			prefix, suffix := hash.ExtractPrefixSuffix(&hw3, prefixNibbleLength)
 
 			// Store and recall prefix as number
 			number := prefix.PrefixAsNumber()
-			hw5 := HashWindow{}
-			prefix2 := hw5.AsPrefixHolder(hashByteLength, prefixNibbleLength)
+			prefix2 := newPrefixHolder(hashByteLength, prefixNibbleLength)
 			prefix2.SetPrefixFromNumber(number)
 			hw6 := HashWindow{}
 			hash2 := prefix2.AppendSuffix(&hw6, suffix)
