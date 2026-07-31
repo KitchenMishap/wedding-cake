@@ -4,7 +4,7 @@ import (
 	"io"
 )
 
-type SuffixHolder struct {
+type Suffix struct {
 	bytes            [MaxHashBytes]byte
 	hashBytesCount   byte // Specified
 	splitNibbleIndex byte // Specified
@@ -13,7 +13,7 @@ type SuffixHolder struct {
 }
 
 // Slight whiff #EGGY needs to work even if hw.bytes have not yet been copied in!
-func (sh *SuffixHolder) Init(hashBytesCount byte, splitNibbleIndex byte) {
+func (sh *Suffix) Init(hashBytesCount byte, splitNibbleIndex byte) {
 	// Specify
 	sh.hashBytesCount = hashBytesCount
 	sh.splitNibbleIndex = splitNibbleIndex
@@ -28,18 +28,18 @@ func (sh *SuffixHolder) Init(hashBytesCount byte, splitNibbleIndex byte) {
 	sh.suffixBytesStart = hashBytesCount - sh.suffixBytesCount
 }
 
-func (sh *SuffixHolder) IsValid() bool {
+func (sh *Suffix) IsValid() bool {
 	return sh.hashBytesCount > 0 && sh.hashBytesCount <= MaxHashBytes
 }
 
-func (sh *SuffixHolder) Read(reader io.Reader) error {
+func (sh *Suffix) Read(reader io.Reader) error {
 	if !sh.IsValid() {
 		panic("Invalid suffix holder")
 	}
 	_, err := io.ReadFull(reader, sh.bytes[sh.suffixBytesStart:sh.hashBytesCount])
 	return err
 }
-func (sh *SuffixHolder) LastReadContainedSpareNibble() (bool, byte) {
+func (sh *Suffix) LastReadContainedSpareNibble() (bool, byte) {
 	if !sh.IsValid() {
 		panic("Invalid suffix holder")
 	}
@@ -50,7 +50,7 @@ func (sh *SuffixHolder) LastReadContainedSpareNibble() (bool, byte) {
 	// The spare nibble is in the most significant nibble of the first byte read
 	return true, (sh.bytes[sh.suffixBytesStart] & 0xF0) >> 4
 }
-func (sh *SuffixHolder) Write(writer io.Writer, spareNibble byte) error {
+func (sh *Suffix) Write(writer io.Writer, spareNibble byte) error {
 	if !sh.IsValid() {
 		panic("Invalid suffix holder")
 	}
@@ -70,7 +70,7 @@ func (sh *SuffixHolder) Write(writer io.Writer, spareNibble byte) error {
 	return err
 }
 
-func (sh *SuffixHolder) RemoveFirstNibble() byte {
+func (sh *Suffix) RemoveFirstNibble() byte {
 	if !sh.IsValid() {
 		panic("Invalid suffix holder")
 	}

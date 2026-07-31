@@ -4,7 +4,7 @@ import (
 	"io"
 )
 
-type PrefixHolder struct {
+type Prefix struct {
 	bytes            [8]byte
 	hashBytesCount   byte // Specified. The bytes in the source hash
 	splitNibbleIndex byte // Specified
@@ -12,7 +12,7 @@ type PrefixHolder struct {
 }
 
 // Slight whiff #EGGY needs to work even if hw.bytes have not yet been copied in!
-func (ph *PrefixHolder) Init(hashBytesCount byte, splitNibbleIndex byte) {
+func (ph *Prefix) Init(hashBytesCount byte, splitNibbleIndex byte) {
 	// Specify
 	ph.hashBytesCount = hashBytesCount
 	ph.splitNibbleIndex = splitNibbleIndex
@@ -28,11 +28,11 @@ func (ph *PrefixHolder) Init(hashBytesCount byte, splitNibbleIndex byte) {
 	ph.prefixBytesCount = bytesCount
 }
 
-func (ph *PrefixHolder) IsValid() bool {
+func (ph *Prefix) IsValid() bool {
 	return ph.hashBytesCount > 0 && ph.hashBytesCount <= MaxHashBytes
 }
 
-func (ph *PrefixHolder) Read(reader io.Reader) error {
+func (ph *Prefix) Read(reader io.Reader) error {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}
@@ -41,7 +41,7 @@ func (ph *PrefixHolder) Read(reader io.Reader) error {
 }
 
 // LastReadContainedSpareNibble Please only call this immediately after a Read()
-func (ph *PrefixHolder) LastReadContainedSpareNibble() (bool, byte) {
+func (ph *Prefix) LastReadContainedSpareNibble() (bool, byte) {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}
@@ -51,7 +51,7 @@ func (ph *PrefixHolder) LastReadContainedSpareNibble() (bool, byte) {
 	}
 	return true, ph.bytes[ph.prefixBytesCount-1] & 0x0F
 }
-func (ph *PrefixHolder) Write(writer io.Writer, spareNibble byte) error {
+func (ph *Prefix) Write(writer io.Writer, spareNibble byte) error {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}
@@ -71,9 +71,9 @@ func (ph *PrefixHolder) Write(writer io.Writer, spareNibble byte) error {
 	return err
 }
 
-// AppendSuffix Append the specified SuffixHolder to this PrefixHolder, using
-// the supplied *HashWindow to construct the resultant HashHolder
-func (ph *PrefixHolder) AppendSuffix(result *HashHolder, suffix *SuffixHolder) {
+// AppendSuffix Append the specified Suffix to this Prefix, using
+// the supplied *HashWindow to construct the resultant Full
+func (ph *Prefix) AppendSuffix(result *Full, suffix *Suffix) {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}
@@ -104,7 +104,7 @@ func (ph *PrefixHolder) AppendSuffix(result *HashHolder, suffix *SuffixHolder) {
 	}
 }
 
-func (ph *PrefixHolder) AppendNibble(nibble byte) {
+func (ph *Prefix) AppendNibble(nibble byte) {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}
@@ -129,14 +129,14 @@ func (ph *PrefixHolder) AppendNibble(nibble byte) {
 	}
 }
 
-func (ph *PrefixHolder) CountSupportedHashPrefixValues() uint64 {
+func (ph *Prefix) CountSupportedHashPrefixValues() uint64 {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}
 	return uint64(1) << (4 * uint64(ph.splitNibbleIndex))
 }
 
-func (ph *PrefixHolder) PrefixAsNumber() uint64 {
+func (ph *Prefix) PrefixAsNumber() uint64 {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}
@@ -160,7 +160,7 @@ func (ph *PrefixHolder) PrefixAsNumber() uint64 {
 	return result
 }
 
-func (ph *PrefixHolder) SetPrefixFromNumber(number uint64) {
+func (ph *Prefix) SetPrefixFromNumber(number uint64) {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}

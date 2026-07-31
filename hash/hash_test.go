@@ -20,7 +20,7 @@ func TestPrefixSuffixDisk(tes *testing.T) {
 		for _, prefixNibbleLength := range prefixNibbleLengths {
 
 			hashArray := helperRandomHash()
-			hash := HashHolder{}
+			hash := Full{}
 			hash.Init(hashByteLength)
 			hash.SetFromArray(hashArray)
 
@@ -43,8 +43,8 @@ func TestPrefixSuffixDisk(tes *testing.T) {
 			}
 
 			// Split into prefix and suffix
-			prefix := PrefixHolder{}
-			suffix := SuffixHolder{}
+			prefix := Prefix{}
+			suffix := Suffix{}
 			hash.ExtractPrefixSuffix(&prefix, &suffix, prefixNibbleLength)
 
 			// Write and read back
@@ -73,9 +73,9 @@ func TestPrefixSuffixDisk(tes *testing.T) {
 			if err != nil {
 				tes.Errorf("Failed to re-open suffix file: %v", err)
 			}
-			prefix2 := PrefixHolder{}
+			prefix2 := Prefix{}
 			prefix2.Init(hashByteLength, prefixNibbleLength)
-			suffix2 := SuffixHolder{}
+			suffix2 := Suffix{}
 			suffix2.Init(hashByteLength, prefixNibbleLength)
 			err = prefix2.Read(prefixFile2)
 			if err != nil {
@@ -93,7 +93,7 @@ func TestPrefixSuffixDisk(tes *testing.T) {
 			if exists && spare != spareNibble {
 				tes.Fatal("Spare nibble mismatch")
 			}
-			hash2 := HashHolder{}
+			hash2 := Full{}
 			prefix2.AppendSuffix(&hash2, &suffix2)
 
 			if !hash.Equal(&hash2) {
@@ -120,16 +120,16 @@ func TestAppendPrefixSuffix(tes *testing.T) {
 		for _, prefixNibbleLength := range prefixNibbleLengths {
 
 			hashArray := helperRandomHash()
-			hash := HashHolder{}
+			hash := Full{}
 			hash.Init(hashByteLength)
 			hash.SetFromArray(hashArray)
 
 			// Split into prefix and suffix
-			prefix := PrefixHolder{}
-			suffix := SuffixHolder{}
+			prefix := Prefix{}
+			suffix := Suffix{}
 			hash.ExtractPrefixSuffix(&prefix, &suffix, prefixNibbleLength)
 
-			hash2 := HashHolder{}
+			hash2 := Full{}
 			prefix.AppendSuffix(&hash2, &suffix)
 
 			if !hash.Equal(&hash2) {
@@ -156,21 +156,21 @@ func TestPrefixAsNumber(tes *testing.T) {
 		for _, prefixNibbleLength := range prefixNibbleLengths {
 
 			hashArray := helperRandomHash()
-			hash := HashHolder{}
+			hash := Full{}
 			hash.Init(hashByteLength)
 			hash.SetFromArray(hashArray)
 
 			// Split into prefix and suffix
-			prefix := PrefixHolder{}
-			suffix := SuffixHolder{}
+			prefix := Prefix{}
+			suffix := Suffix{}
 			hash.ExtractPrefixSuffix(&prefix, &suffix, prefixNibbleLength)
 
 			// Store and recall prefix as number
 			number := prefix.PrefixAsNumber()
-			prefix2 := PrefixHolder{}
+			prefix2 := Prefix{}
 			prefix2.Init(hashByteLength, prefixNibbleLength)
 			prefix2.SetPrefixFromNumber(number)
-			hash2 := HashHolder{}
+			hash2 := Full{}
 			prefix2.AppendSuffix(&hash2, &suffix)
 
 			if !hash.Equal(&hash2) {
