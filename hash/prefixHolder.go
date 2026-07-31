@@ -12,7 +12,12 @@ type PrefixHolder struct {
 }
 
 // Slight whiff #EGGY needs to work even if hw.bytes have not yet been copied in!
-func newPrefixHolder(hashBytesCount byte, splitNibbleIndex byte) PrefixHolder {
+func (ph *PrefixHolder) Init(hashBytesCount byte, splitNibbleIndex byte) {
+	// Specify
+	ph.hashBytesCount = hashBytesCount
+	ph.splitNibbleIndex = splitNibbleIndex
+
+	// Calculate
 	if splitNibbleIndex > 16 {
 		panic("Prefixes support up to 16 nibbles")
 	}
@@ -20,7 +25,7 @@ func newPrefixHolder(hashBytesCount byte, splitNibbleIndex byte) PrefixHolder {
 	if splitNibbleIndex&1 == 1 {
 		bytesCount++
 	}
-	return PrefixHolder{hashBytesCount: hashBytesCount, splitNibbleIndex: splitNibbleIndex, prefixBytesCount: bytesCount}
+	ph.prefixBytesCount = bytesCount
 }
 
 func (ph *PrefixHolder) IsValid() bool {
@@ -68,28 +73,28 @@ func (ph *PrefixHolder) Write(writer io.Writer, spareNibble byte) error {
 
 // AppendSuffix Append the specified SuffixHolder to this PrefixHolder, using
 // the supplied *HashWindow to construct the resultant HashHolder
-func (ph *PrefixHolder) AppendSuffix(target *HashWindow, suffix SuffixHolder) HashHolder {
+func (ph *PrefixHolder) AppendSuffix(target *HashWindow, suffix *SuffixHolder) HashHolder {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}
-	if suffix.splitNibbleIndex != ph.splitNibbleIndex || suffix.hw.hashByteCount != ph.hashBytesCount {
+	if suffix.splitNibbleIndex != ph.splitNibbleIndex || suffix.hashBytesCount != ph.hashBytesCount {
 		panic("Prefix and suffix are not a matching pair")
 	}
 	if ph.splitNibbleIndex&1 == 0 {
 		// Aah... Easy mode. Prefix and suffix are isolated byte slices. (Even number of nibbles each)
 		copy(target.bytes[:ph.prefixBytesCount], ph.bytes[:ph.prefixBytesCount]) // Prefix bytes
-		copy(target.bytes[suffix.suffixBytesStart:suffix.hw.hashByteCount],      // Suffix bytes
-			suffix.hw.bytes[suffix.suffixBytesStart:suffix.hw.hashByteCount])
+		copy(target.bytes[suffix.suffixBytesStart:suffix.hashBytesCount],        // Suffix bytes
+			suffix.bytes[suffix.suffixBytesStart:suffix.hashBytesCount])
 	} else {
 		// ooh... call the boss for this one
 		// 1) There is one byte that we'll put aside the end of the prefix, and a byte from the start of the suffix.
 		// This is because they overlap; they need to be "merged" into one destination byte
 		skippedFromPrefixEnd := ph.bytes[ph.prefixBytesCount-1]
-		skippedFromSuffixStart := suffix.hw.bytes[ph.prefixBytesCount-1]                   // (yes they have the same index)
+		skippedFromSuffixStart := suffix.bytes[ph.prefixBytesCount-1]                      // (yes they have the same index)
 		skip := byte(1)                                                                    // Number of bytes we're skipping for the moment
 		copy(target.bytes[:ph.prefixBytesCount-skip], ph.bytes[:ph.prefixBytesCount-skip]) // Easy prefix bytes
-		copy(target.bytes[suffix.suffixBytesStart+skip:suffix.hw.hashByteCount],           // Easy suffix bytes
-			suffix.hw.bytes[suffix.suffixBytesStart+skip:suffix.hw.hashByteCount])
+		copy(target.bytes[suffix.suffixBytesStart+skip:suffix.hashBytesCount],             // Easy suffix bytes
+			suffix.bytes[suffix.suffixBytesStart+skip:suffix.hashBytesCount])
 		// The final overlapping byte to merge in the middle isn't all that tricky
 		mostSignificant := skippedFromPrefixEnd & 0xF0
 		leastSignificant := skippedFromSuffixStart & 0x0F
@@ -134,7 +139,7 @@ func (ph *PrefixHolder) CountSupportedHashPrefixValues() uint64 {
 	return uint64(1) << (4 * uint64(ph.splitNibbleIndex))
 }
 
-func (ph PrefixHolder) PrefixAsNumber() uint64 {
+func (ph *PrefixHolder) PrefixAsNumber() uint64 {
 	if !ph.IsValid() {
 		panic("Invalid prefix holder")
 	}

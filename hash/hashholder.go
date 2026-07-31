@@ -33,19 +33,16 @@ func (hh HashHolder) Equal(other HashHolder) bool {
 	}
 	return bytes.Equal(hh.hw.bytes[:hh.hw.hashByteCount], other.hw.bytes[:other.hw.hashByteCount])
 }
-func (hh HashHolder) ExtractPrefixSuffix(target2 *HashWindow,
-	splitNibbleIndex byte) (PrefixHolder, SuffixHolder) {
+func (hh HashHolder) ExtractPrefixSuffix(resultPrefix *PrefixHolder, resultSuffix *SuffixHolder, splitNibbleIndex byte) {
 
 	// Prefix
-	prefix := newPrefixHolder(hh.hw.hashByteCount, splitNibbleIndex)
-	copy(prefix.bytes[:prefix.prefixBytesCount], hh.hw.bytes[:prefix.prefixBytesCount])
+	resultPrefix.Init(hh.hw.hashByteCount, splitNibbleIndex)
+	copy(resultPrefix.bytes[:resultPrefix.prefixBytesCount], hh.hw.bytes[:resultPrefix.prefixBytesCount])
 
 	// Suffix
-	target2.hashByteCount = hh.hw.hashByteCount
-	suffix := newSuffixHolder(target2, splitNibbleIndex) // #EGGY as above
-	copy(target2.bytes[suffix.suffixBytesStart:hh.hw.hashByteCount], hh.hw.bytes[suffix.suffixBytesStart:hh.hw.hashByteCount])
-
-	return prefix, suffix
+	resultSuffix.Init(hh.hw.hashByteCount, splitNibbleIndex)
+	copy(resultSuffix.bytes[resultSuffix.suffixBytesStart:hh.hw.hashByteCount],
+		hh.hw.bytes[resultSuffix.suffixBytesStart:hh.hw.hashByteCount])
 }
 func (hh HashHolder) HashIsZeroes() bool {
 	zeroes := [MaxHashBytes]byte{}

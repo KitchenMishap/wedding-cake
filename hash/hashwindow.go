@@ -12,8 +12,3 @@ func (hw *HashWindow) AsHashHolder(hashByteCount byte) HashHolder {
 	hw.hashByteCount = hashByteCount
 	return newHashHolder(hw)
 }
-
-func (hw *HashWindow) AsSuffixHolder(hashByteCount byte, splitNibbleIndex byte) SuffixHolder {
-	hw.hashByteCount = hashByteCount
-	return newSuffixHolder(hw, splitNibbleIndex)
-}
