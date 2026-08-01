@@ -96,7 +96,11 @@ func TestCakeAppend(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	fmt.Printf("Checking %d hashes...\n", count)
 	for i := 0; i < count; i++ {
+		if i%10000 == 0 {
+			fmt.Printf("\t%.1f%%\n", float64(i)/float64(count)*100)
+		}
 		hashExpected := hashes[i]
 		piExpected := pis[i]
 
@@ -166,6 +170,9 @@ func TestCakeNoCheck(t *testing.T) {
 		}
 		if pi != types.GlobalPresentationIndexNoMatch {
 			t.Fatal("Hash should not be found yet")
+		}
+		if i == 1048559 {
+			fmt.Println("i==1048559")
 		}
 		err = cake.AppendHash(types.GlobalPi(i), hash)
 		if err != nil {

@@ -25,7 +25,7 @@ func NewCakeFactory(folderPath string) *CakeFactory {
 	result.config[0].NodeFormatSpecsPerLevel = 10
 	result.config[0].NodeIdRWriter = smalltree.ID16[types.LocalNodeId]{}
 	result.config[0].LocalPiRWriter = smalltree.ID16[types.LocalPi]{}
-	result.config[0].PrefixIndexRWriter = smalltree.ID0[types.PrefixIndex]{}  // A read writer that writes no bytes!
+	//	result.config[0].PrefixIndexRWriter = smalltree.ID0[types.PrefixIndex]{}  // A read writer that writes no bytes!
 	result.config[0].SuffixIndexRWriter = smalltree.ID24[types.SuffixIndex]{} // ToDo 24 not guaranteed enough
 
 	result.config[1].ReassuranceBytesCount = 2
@@ -33,7 +33,7 @@ func NewCakeFactory(folderPath string) *CakeFactory {
 	result.config[1].NodeFormatSpecsPerLevel = 10
 	result.config[1].NodeIdRWriter = smalltree.ID16[types.LocalNodeId]{}
 	result.config[1].LocalPiRWriter = smalltree.ID24[types.LocalPi]{}
-	result.config[1].PrefixIndexRWriter = smalltree.ID8[types.PrefixIndex]{}
+	//	result.config[1].PrefixIndexRWriter = smalltree.ID8[types.PrefixIndex]{}
 	result.config[1].SuffixIndexRWriter = smalltree.ID24[types.SuffixIndex]{}
 
 	result.config[2].ReassuranceBytesCount = 2
@@ -41,7 +41,7 @@ func NewCakeFactory(folderPath string) *CakeFactory {
 	result.config[2].NodeFormatSpecsPerLevel = 10
 	result.config[2].NodeIdRWriter = smalltree.ID16[types.LocalNodeId]{}
 	result.config[2].LocalPiRWriter = smalltree.ID24[types.LocalPi]{}
-	result.config[2].PrefixIndexRWriter = smalltree.ID8[types.PrefixIndex]{}
+	//	result.config[2].PrefixIndexRWriter = smalltree.ID8[types.PrefixIndex]{}
 	result.config[2].SuffixIndexRWriter = smalltree.ID24[types.SuffixIndex]{}
 
 	result.config[3].ReassuranceBytesCount = 2
@@ -49,7 +49,7 @@ func NewCakeFactory(folderPath string) *CakeFactory {
 	result.config[3].NodeFormatSpecsPerLevel = 10
 	result.config[3].NodeIdRWriter = smalltree.ID16[types.LocalNodeId]{}
 	result.config[3].LocalPiRWriter = smalltree.ID32[types.LocalPi]{}
-	result.config[3].PrefixIndexRWriter = smalltree.ID16[types.PrefixIndex]{}
+	//	result.config[3].PrefixIndexRWriter = smalltree.ID16[types.PrefixIndex]{}
 	result.config[3].SuffixIndexRWriter = smalltree.ID24[types.SuffixIndex]{}
 
 	result.config[4].ReassuranceBytesCount = 2
@@ -57,7 +57,7 @@ func NewCakeFactory(folderPath string) *CakeFactory {
 	result.config[4].NodeFormatSpecsPerLevel = 10
 	result.config[4].NodeIdRWriter = smalltree.ID16[types.LocalNodeId]{}
 	result.config[4].LocalPiRWriter = smalltree.ID32[types.LocalPi]{}
-	result.config[4].PrefixIndexRWriter = smalltree.ID16[types.PrefixIndex]{}
+	//	result.config[4].PrefixIndexRWriter = smalltree.ID16[types.PrefixIndex]{}
 	result.config[4].SuffixIndexRWriter = smalltree.ID24[types.SuffixIndex]{}
 
 	result.hashBytesLength = 32

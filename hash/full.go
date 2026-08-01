@@ -62,7 +62,7 @@ func (hh *Full) ExtractPrefixSuffix(resultPrefix *Prefix, resultSuffix *Suffix, 
 	copy(resultSuffix.bytes[resultSuffix.suffixBytesStart:hh.hashBytesCount],
 		hh.bytes[resultSuffix.suffixBytesStart:hh.hashBytesCount])
 }
-func (hh Full) HashIsZeroes() bool {
+func (hh *Full) HashIsZeroes() bool {
 	zeroes := [MaxHashBytes]byte{}
 	return bytes.Equal(hh.bytes[:hh.hashBytesCount], zeroes[:hh.hashBytesCount])
 }

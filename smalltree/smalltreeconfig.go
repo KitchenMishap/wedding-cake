@@ -12,6 +12,6 @@ type SmallTreeConfig struct {
 	NodeFormatSpecsPerLevel byte
 	NodeIdRWriter           NByteIdConfig[types.LocalNodeId]
 	LocalPiRWriter          NByteIdConfig[types.LocalPi]
-	PrefixIndexRWriter      NByteIdConfig[types.PrefixIndex]
-	SuffixIndexRWriter      NByteIdConfig[types.SuffixIndex]
+	//	PrefixIndexRWriter      NByteIdConfig[types.PrefixIndex]
+	SuffixIndexRWriter NByteIdConfig[types.SuffixIndex]
 }

@@ -62,7 +62,7 @@ func TestFormatFilePathFilename(t *testing.T) {
 	const digitsPerFolder = byte(2)
 	nibbleCount := byte(3)
 	filenameDigits, foldersDigits := CalculatePrefixPattern(nibbleCount, digitsPerFolder)
-	filename, folderName := formatFilePathFilename([]shallowtreebyte.NibbleVal{0, 1, 2}, filenameDigits, foldersDigits)
+	filename, folderName := FormatFilePathFilename([]shallowtreebyte.NibbleVal{0, 1, 2}, filenameDigits, foldersDigits)
 	if filename != "12" {
 		t.Fatal("Expected filename to be 12")
 	}
@@ -72,7 +72,7 @@ func TestFormatFilePathFilename(t *testing.T) {
 
 	nibbleCount = byte(5)
 	filenameDigits, foldersDigits = CalculatePrefixPattern(nibbleCount, digitsPerFolder)
-	filename, folderName = formatFilePathFilename([]shallowtreebyte.NibbleVal{1, 2, 3, 4, 5}, filenameDigits, foldersDigits)
+	filename, folderName = FormatFilePathFilename([]shallowtreebyte.NibbleVal{1, 2, 3, 4, 5}, filenameDigits, foldersDigits)
 	if filename != "45" {
 		t.Fatal("Expected filename to be 45")
 	}
@@ -82,7 +82,7 @@ func TestFormatFilePathFilename(t *testing.T) {
 
 	nibbleCount = byte(0)
 	filenameDigits, foldersDigits = CalculatePrefixPattern(nibbleCount, digitsPerFolder)
-	filename, folderName = formatFilePathFilename([]shallowtreebyte.NibbleVal{}, filenameDigits, foldersDigits)
+	filename, folderName = FormatFilePathFilename([]shallowtreebyte.NibbleVal{}, filenameDigits, foldersDigits)
 	if filename != "" {
 		t.Fatal("Expected filename to be empty")
 	}
@@ -92,7 +92,7 @@ func TestFormatFilePathFilename(t *testing.T) {
 
 	nibbleCount = byte(1)
 	filenameDigits, foldersDigits = CalculatePrefixPattern(nibbleCount, digitsPerFolder)
-	filename, folderName = formatFilePathFilename([]shallowtreebyte.NibbleVal{5}, filenameDigits, foldersDigits)
+	filename, folderName = FormatFilePathFilename([]shallowtreebyte.NibbleVal{5}, filenameDigits, foldersDigits)
 	if filename != "5" {
 		t.Fatal("Expected filename to be 5")
 	}

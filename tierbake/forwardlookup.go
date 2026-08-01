@@ -1,51 +1,66 @@
 package tierbake
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/kitchenmishap/wedding-cake/hash"
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
 	"github.com/kitchenmishap/wedding-cake/smalltree"
 	"github.com/kitchenmishap/wedding-cake/types"
 )
 
 func ForwardLookup(pi types.LocalPi, prefixNibblesCount shallowtreebyte.NibbleIndex,
-	donutPath string, donutConfig *smalltree.SmallTreeConfig) ([]shallowtreebyte.NibbleVal, error) {
+	donutPath string, donutConfig *smalltree.SmallTreeConfig,
+	result *hash.Full) error {
 
 	hashesOrderFname := filepath.Join(donutPath, "HashesOrder.bin")
 	hashesOrderFile, err := os.Open(hashesOrderFname)
 	defer func() { _ = hashesOrderFile.Close() }()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	prefixSize := donutConfig.PrefixIndexRWriter.StorageBytes()
+	prefixBytesCount := prefixNibblesCount / 2
+	if prefixNibblesCount&1 == 1 {
+		prefixBytesCount++
+	}
+	prefixSize := int(prefixBytesCount)
 	suffixSize := donutConfig.SuffixIndexRWriter.StorageBytes()
 	entrySize := int64(prefixSize + suffixSize)
 
 	info, err := hashesOrderFile.Stat()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	overflow := info.Size() % entrySize
 	if overflow != 0 {
 		panic("Wrong size for HashesOrder.bin")
 	}
 
-	entry := make([]byte, entrySize)
+	prefixObj := hash.Prefix{}
+	prefixObj.Init(byte(donutConfig.HashNibbleLength/2), byte(prefixNibblesCount))
+
 	_, err = hashesOrderFile.Seek(int64(pi)*entrySize, 0)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	_, err = hashesOrderFile.Read(entry)
+	// First we read the prefix index
+	err = prefixObj.Read(hashesOrderFile)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	prefixIndex := donutConfig.PrefixIndexRWriter.ReadID(entry[:])
-	suffixIndex := donutConfig.SuffixIndexRWriter.ReadID(entry[prefixSize:])
+	prefixIndex := prefixObj.PrefixAsNumber()
+	// Then we read the suffix index
+	const spareBytes = 8
+	suffixIndexBytes := [spareBytes]byte{}
+	suffixIndexBytesCount := donutConfig.SuffixIndexRWriter.StorageBytes()
+	_, err = hashesOrderFile.Read(suffixIndexBytes[:suffixIndexBytesCount])
+	if err != nil {
+		return err
+	}
+	suffixIndex := donutConfig.SuffixIndexRWriter.ReadID(suffixIndexBytes[:])
 
 	prefix := make([]shallowtreebyte.NibbleVal, prefixNibblesCount)
 	// Work from LS nibble to MS nibble
@@ -62,7 +77,7 @@ func ForwardLookup(pi types.LocalPi, prefixNibblesCount shallowtreebyte.NibbleIn
 
 	suffixFile, err := os.Open(suffixFilePath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = suffixFile.Close() }()
 
@@ -82,33 +97,34 @@ func ForwardLookup(pi types.LocalPi, prefixNibblesCount shallowtreebyte.NibbleIn
 
 	_, err = suffixFile.Seek(int64(suffixIndex)*suffixEntrySize, io.SeekStart)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	suffixEntry := make([]byte, suffixEntrySize)
-	_, err = suffixFile.Read(suffixEntry)
+
+	// Read suffix
+	suffixObj := hash.Suffix{}
+	suffixObj.Init(byte(donutConfig.HashNibbleLength/2), byte(prefixNibblesCount))
+	err = suffixObj.Read(suffixFile)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	piResult := donutConfig.LocalPiRWriter.ReadID(suffixEntry[suffixByteSize:])
-
-	suffix := make([]shallowtreebyte.NibbleVal, suffixNibblesSize)
-	for nibbleIndex := shallowtreebyte.NibbleIndex(0); nibbleIndex < suffixNibblesSize; nibbleIndex++ {
-		byteVal := suffixEntry[nibbleIndex/2]
-		nibbleVal := shallowtreebyte.NibbleVal(byteVal & 0x0F) // LS nibble
-		if nibbleIndex&1 == 0 {
-			nibbleVal = shallowtreebyte.NibbleVal(byteVal >> 4) // MS nibble
-		}
-		suffix[nibbleIndex] = nibbleVal
+	// Read localPi
+	someBytes := [spareBytes]byte{}
+	_, err = suffixFile.Read(someBytes[:donutConfig.LocalPiRWriter.StorageBytes()])
+	if err != nil {
+		return err
 	}
+	piResult := donutConfig.LocalPiRWriter.ReadID(someBytes[:])
 
-	hash := append(prefix, suffix...)
+	prefixObjB := hash.Prefix{}
+	prefixObjB.Init(byte(donutConfig.HashNibbleLength/2), byte(prefixNibblesCount))
+	prefixObjB.SetPrefixFromNumber(uint64(prefixIndex))
+	prefixObjB.AppendSuffix(result, &suffixObj)
 
 	if piResult == pi {
-		fmt.Printf("Pi match in xxxHashSuffix.bin file!\n")
 	} else {
 		panic("Pi should match in xxxHashSuffix.bin file")
 	}
 
-	return hash, nil
+	return nil
 }

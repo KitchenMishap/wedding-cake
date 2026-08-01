@@ -1,6 +1,7 @@
 package inputtier
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -21,8 +22,10 @@ import (
 type InputTier struct {
 	numberedFolderPath string
 
-	hashesOrderFile *os.File // Remains open for append whilst InputTier is open
-	hashSuffixFile  *os.File // Remains open for append whilst InputTier is open
+	hashesOrderFile   *os.File // Remains open for append whilst InputTier is open
+	hashSuffixFile    *os.File // Remains open for append whilst InputTier is open
+	hashesOrderWriter *bufio.Writer
+	hashSuffixWriter  *bufio.Writer
 
 	config          *smalltree.SmallTreeConfig
 	hashBytesLength byte
@@ -61,16 +64,27 @@ func OpenInputTier(cakeFolderPath string, tierConfig *smalltree.SmallTreeConfig,
 	if err != nil {
 		return nil, err
 	}
+	result.hashesOrderWriter = bufio.NewWriterSize(result.hashesOrderFile, 64*1024)
+
 	fName = filepath.Join(result.numberedFolderPath, "HashPrefix", "HashSuffix.bin")
 	result.hashSuffixFile, err = os.OpenFile(fName, os.O_APPEND, 0644)
 	if err != nil {
 		return nil, err
 	}
+	result.hashSuffixWriter = bufio.NewWriterSize(result.hashSuffixFile, 64*1024)
 	return &result, nil
 }
 
 func (it *InputTier) Close() error {
-	err := it.hashesOrderFile.Close()
+	err := it.hashesOrderWriter.Flush()
+	if err != nil {
+		return err
+	}
+	err = it.hashesOrderFile.Close()
+	if err != nil {
+		return err
+	}
+	err = it.hashSuffixWriter.Flush()
 	if err != nil {
 		return err
 	}
@@ -104,9 +118,9 @@ func (it *InputTier) AppendHash(gpi types.GlobalPi, hash []byte) error {
 
 	// Usually we would write prefixIndex, suffixIndex pairs (suffix indices for the input tier are equal to localPi's)
 	// However in the case of the input tier, prefix indices are length zero!
-	if it.config.PrefixIndexRWriter.StorageBytes() != 0 {
-		panic("Input tier expects zero length prefix index configuration")
-	}
+	//if it.config.PrefixIndexRWriter.StorageBytes() != 0 {
+	//	panic("Input tier expects zero length prefix index configuration")
+	//}
 
 	bytesToWriteLength := (gap + 1) * suffixIndexByteCount
 	bytesToWrite := make([]byte, bytesToWriteLength)
@@ -119,7 +133,7 @@ func (it *InputTier) AppendHash(gpi types.GlobalPi, hash []byte) error {
 	// But they might not be encoded with the same number of bytes!
 	it.config.SuffixIndexRWriter.WriteID(bytesToWrite[offset:], types.SuffixIndex(localPi))
 	offset += suffixIndexByteCount
-	_, err := it.hashesOrderFile.Write(bytesToWrite[:bytesToWriteLength])
+	_, err := it.hashesOrderWriter.Write(bytesToWrite[:bytesToWriteLength])
 	if err != nil {
 		return err
 	}
@@ -129,7 +143,7 @@ func (it *InputTier) AppendHash(gpi types.GlobalPi, hash []byte) error {
 	bytesToWriteSuffix := [spareBytes]byte{}
 	copy(bytesToWriteSuffix[:len(hash)], hash)
 	it.config.LocalPiRWriter.WriteID(bytesToWriteSuffix[len(hash):], localPi)
-	_, err = it.hashSuffixFile.Write(bytesToWriteSuffix[0 : uint64(len(hash))+piByteCount])
+	_, err = it.hashSuffixWriter.Write(bytesToWriteSuffix[0 : uint64(len(hash))+piByteCount])
 	if err != nil {
 		return err
 	}

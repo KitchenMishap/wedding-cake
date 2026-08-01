@@ -1,15 +1,16 @@
 package cake
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"time"
 
 	"github.com/kitchenmishap/wedding-cake/forest"
+	"github.com/kitchenmishap/wedding-cake/hash"
 	"github.com/kitchenmishap/wedding-cake/inputtier"
 	"github.com/kitchenmishap/wedding-cake/shallowtreebyte"
 	"github.com/kitchenmishap/wedding-cake/smalltree"
@@ -56,7 +57,6 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 		return err
 	}
 	if c.openInputTier.CountPresentationIndices() == 65535 {
-		fmt.Printf("We have reached 65535 hashes in the input tier, time to freeze and bake...\n")
 		path, offset, err := c.FreezeInputTierForBaking()
 		if err != nil {
 			return err
@@ -74,7 +74,6 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 		// We may need to open the new tier
 		if donutsCount == 1 {
 			// New tier 0
-			fmt.Printf("First donut in new tier 0\n")
 			c.tiersInfo.offset[0] = offset
 			c.tiersInfo.present[0] = true
 			err = c.tiersInfo.ToDisk(c.folderPath)
@@ -89,7 +88,6 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 			}
 		} else {
 			// New donut in tier 0
-			fmt.Printf("New donut (there are now %d) in tier 0\n", donutsCount)
 			if c.openTiers[0] == nil {
 				panic("tier 0 should be non-nil if we've just baked a donut into it")
 			} else {
@@ -108,7 +106,6 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 		// We might have to do further bakes
 		tierWeAreBaking := byte(0)
 		for donutsCount == 16 {
-			fmt.Printf("Ooh there are now 16 donuts in tier %d... time to freeze and bake!\n", tierWeAreBaking)
 			path, offset, donutOffsets, err := c.FreezeTierForBaking(tierWeAreBaking) // ToDo look into this re openTiers
 			if err != nil {
 				return err
@@ -129,7 +126,6 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 			// We may need to open the new tier
 			if donutsCount == 1 {
 				// New tier
-				fmt.Printf("First donut in new tier... but which tier ?!\n")
 				c.tiersInfo.offset[tierWeAreBaking+1] = offset
 				c.tiersInfo.present[tierWeAreBaking+1] = true
 				err = c.tiersInfo.ToDisk(c.folderPath)
@@ -144,7 +140,6 @@ func (c *Cake) AppendHash(gpi types.GlobalPi, hash []byte) error {
 				}
 			} else {
 				// New donut in tier
-				fmt.Printf("New donut (there are now %d) in tier... which tier?\n", donutsCount)
 				if c.openTiers[tierWeAreBaking+1] == nil {
 					panic("tier should be non-nil if we've just baked a donut into it")
 				} else {
@@ -296,13 +291,15 @@ func (c *Cake) FreezeTierForBaking(tierIndex byte) (string, types.PiOffset,
 func (c *Cake) BakeFrozenTier(numberedPath string, offset types.PiOffset,
 	donutOffsets []types.PiOffset, tierIndex byte) (string, byte, error) {
 
-	start := time.Now()
-	fmt.Printf("Baking frozen tier %d...\n", tierIndex)
-
 	donutPath, donutsCount, err := c.newDonutFolder(tierIndex+1, offset)
 	if err != nil {
 		return "", 0, err
 	}
+	tabs := ""
+	if tierIndex > 1 {
+		tabs = "\t\t"
+	}
+	fmt.Printf("%sBaking to %s...\n", tabs, donutPath)
 
 	// Note the following has "no clue" about the tier objects it would be working with.
 	// This is as it should be - the tier is frozen so this function should work
@@ -318,8 +315,6 @@ func (c *Cake) BakeFrozenTier(numberedPath string, offset types.PiOffset,
 		return "", 0, err
 	}
 
-	fmt.Printf("\t...%.1f minutes\n", time.Since(start).Minutes())
-
 	return donutPath, donutsCount, nil
 }
 
@@ -330,7 +325,8 @@ func (c *Cake) BakeFrozenInputTier(numberedPath string, offset types.PiOffset) (
 	}
 
 	// Initial check by forward lookup pf localPi 0
-	hash, err := tierbake.ForwardLookup(0, 0, numberedPath, c.config[0])
+	theHash := hash.Full{}
+	err = tierbake.ForwardLookup(0, 0, numberedPath, c.config[0], &theHash)
 	if err != nil {
 		return "", 0, err
 	}
@@ -346,12 +342,12 @@ func (c *Cake) BakeFrozenInputTier(numberedPath string, offset types.PiOffset) (
 	}
 
 	// Check for same hash in baked donut
-	hash2, err := tierbake.ForwardLookup(0, 0, donutPath, c.config[0])
+	newHash := hash.Full{}
+	err = tierbake.ForwardLookup(0, 0, donutPath, c.config[0], &newHash)
 	if err != nil {
 		return "", 0, err
 	}
-	if slices.Equal(hash, hash2) {
-		fmt.Printf("Hash match after bake to tier 0 :-)\n")
+	if theHash.Equal(&newHash) {
 	} else {
 		panic("hash mismatch after bake to tier 0")
 	}
@@ -360,9 +356,9 @@ func (c *Cake) BakeFrozenInputTier(numberedPath string, offset types.PiOffset) (
 }
 
 func (c *Cake) IceTheDonut(donutPath string, tierIndex byte) error {
-	start := time.Now()
+	startTime := time.Now()
 	if tierIndex > 0 {
-		fmt.Printf("Icing a donut in tier %d...\n", tierIndex)
+		fmt.Printf("Icing a donut to %s...\n", donutPath)
 	}
 
 	icingPath := filepath.Join(donutPath, "Icing")
@@ -380,9 +376,22 @@ func (c *Cake) IceTheDonut(donutPath string, tierIndex byte) error {
 	if suffixNibbles&1 == 1 {
 		suffixBytes++
 	}
+	const spareBytes = 8
+	piBytes := [spareBytes]byte{}
+	piByteCount := c.config[tierIndex].LocalPiRWriter.StorageBytes()
+
+	prefixObj := hash.Prefix{}
+	prefixObj.Init(c.hashBytesLength, byte(prefixNibbles))
+	suffixObj := hash.Suffix{}
+	suffixObj.Init(c.hashBytesLength, byte(prefixNibbles)) // Yes prefixNibbles!
+	hashObj := hash.Full{}
+
+	hashArray := [hash.MaxHashBytes]byte{}
+
 	prefixIndexCount := 1 << (prefixNibbles * 4) // 16 ^ prefixNibbles
 	filenameDigits, foldersDigits := tierbake.CalculatePrefixPattern(byte(prefixNibbles), 2)
 	for prefixIndex := forest.PrefixIndexType(0); prefixIndex < forest.PrefixIndexType(prefixIndexCount); prefixIndex++ {
+		prefixObj.SetPrefixFromNumber(uint64(prefixIndex))
 		prefixNibblesSlice := make([]shallowtreebyte.NibbleVal, prefixNibbles)
 		for nibbleIndex := shallowtreebyte.NibbleIndex(0); nibbleIndex < prefixNibbles; nibbleIndex++ {
 			nibblesToShiftRightBy := prefixNibbles - nibbleIndex - 1
@@ -394,48 +403,86 @@ func (c *Cake) IceTheDonut(donutPath string, tierIndex byte) error {
 		if err != nil {
 			return err
 		}
-		contents, err := io.ReadAll(file)
+		stat, err := file.Stat()
 		if err != nil {
 			_ = file.Close()
 			return err
 		}
-		err = file.Close()
-		if err != nil {
-			return err
-		}
+		suffixReader := bufio.NewReaderSize(file, 64*1024)
+		//		contents, err := io.ReadAll(file)
+		//		if err != nil {
+		//			_ = file.Close()
+		//			return err
+		//		}
+		//		err = file.Close()
+		//		if err != nil {
+		//			return err
+		//		}
 		byteCount := c.config[tierIndex].LocalPiRWriter.StorageBytes()
 		entrySize := int(suffixBytes) + byteCount
-		if len(contents)%entrySize != 0 {
+		size := stat.Size()
+		if size%int64(entrySize) != 0 {
 			panic("Wrong size suffix file")
 		}
-		entryCount := len(contents) / entrySize
+		entryCount := size / int64(entrySize)
 		input := make([]shallowtreebyte.HashPi, entryCount)
-		for i := 0; i < entryCount; i++ {
-			start := i * entrySize
+		for i := int64(0); i < entryCount; i++ {
+			//start := i * entrySize
+
 			// Here nibbles is ALL the nibbles in the hash.
 			// Some come from the prefix (from filename), some come from the suffix (from file contents)
-			nibbles := make([]shallowtreebyte.NibbleVal, c.hashBytesLength*2)
-			copy(nibbles[0:prefixNibbles], prefixNibblesSlice)
-			suffixByteIndex := 0
-			suffixNibbleIndex := 0
-			for nibbleIndex := prefixNibbles; nibbleIndex < shallowtreebyte.NibbleIndex(c.hashBytesLength*2); nibbleIndex++ {
-				byteVal := contents[start+suffixByteIndex]
-				if suffixNibbleIndex&1 == 0 {
-					// Most significant nibble of pair
-					nibbles[nibbleIndex] = shallowtreebyte.NibbleVal(byteVal >> 4)
-				} else {
-					nibbles[nibbleIndex] = shallowtreebyte.NibbleVal(byteVal & 0x0F)
-					suffixByteIndex++
-				}
-				suffixNibbleIndex++
+
+			// Read the suffix
+			err = suffixObj.Read(suffixReader)
+			if err != nil {
+				return err
 			}
+
+			// Make a hash out of the prefix and the suffix
+			prefixObj.AppendSuffix(&hashObj, &suffixObj)
+			hashObj.GetToArray(&hashArray)
+
+			// Compile into nibblesArray
+			nibblesArray := make([]shallowtreebyte.NibbleVal, c.hashBytesLength*2)
+			for j := byte(0); j < c.hashBytesLength; j++ {
+				nibblesArray[j*2] = shallowtreebyte.NibbleVal(hashArray[j] >> 4)
+				nibblesArray[j*2+1] = shallowtreebyte.NibbleVal(hashArray[j] & 0x0F)
+			}
+
+			/*
+				nibbles := make([]shallowtreebyte.NibbleVal, c.hashBytesLength*2)
+				copy(nibbles[0:prefixNibbles], prefixNibblesSlice)
+				suffixByteIndex := 0
+				suffixNibbleIndex := 0
+				for nibbleIndex := prefixNibbles; nibbleIndex < shallowtreebyte.NibbleIndex(c.hashBytesLength*2); nibbleIndex++ {
+					byteVal := contents[start+suffixByteIndex]
+					if suffixNibbleIndex&1 == 0 {
+						// Most significant nibble of pair
+						nibbles[nibbleIndex] = shallowtreebyte.NibbleVal(byteVal >> 4)
+					} else {
+						nibbles[nibbleIndex] = shallowtreebyte.NibbleVal(byteVal & 0x0F)
+						suffixByteIndex++
+					}
+					suffixNibbleIndex++
+				}*/
+
+			// Read the presentation index
+			_, err = io.ReadFull(suffixReader, piBytes[:piByteCount])
+			if err != nil {
+				return err
+			}
+
 			input[i] = shallowtreebyte.HashPi{
-				Hash:              nibbles,
-				PresentationIndex: c.config[tierIndex].LocalPiRWriter.ReadID(contents[start+int(suffixBytes) : start+int(suffixBytes)+byteCount]),
+				Hash:              nibblesArray,
+				PresentationIndex: c.config[tierIndex].LocalPiRWriter.ReadID(piBytes[:]),
 			}
 			if input[i].PresentationIndex == types.LocalPiNoMatch {
 				panic("No match presentation index")
 			}
+		}
+		err = file.Close()
+		if err != nil {
+			return err
 		}
 		st := shallowtreebyte.GenerateShallowTree(input, prefixNibbles, shallowtreebyte.NibbleIndex(c.hashBytesLength*2), shallowtreebyte.ByteIndex(c.config[tierIndex].ReassuranceBytesCount), 0)
 		tf := smalltree.DesignTreeFormat(st, c.config[tierIndex])
@@ -451,7 +498,7 @@ func (c *Cake) IceTheDonut(donutPath string, tierIndex byte) error {
 	}
 
 	if tierIndex > 0 {
-		fmt.Printf("\t...%.1f minutes\n", time.Since(start).Minutes())
+		fmt.Printf("\t...%.1f minutes\n", time.Since(startTime).Minutes())
 	}
 
 	return nil
